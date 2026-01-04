@@ -105,20 +105,40 @@ export const adminAPI = {
     return response.json();
   },
 
+  async markAsRead(conversationId) {
+    const response = await fetch(`${API_URL}/admin/conversations/${conversationId}/read`, {
+      method: 'POST',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to mark as read');
+    return response.json();
+  },
+
   // Upload
   async uploadMedia(file) {
+    const token = getToken();
+    console.log('Upload - Token exists:', !!token);
+    console.log('Upload - File:', file?.name, file?.type, file?.size);
+    
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_URL}/upload`, {
+    const response = await fetch(`${API_URL}/admin/upload`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${getToken()}`
+        'Authorization': `Bearer ${token}`
       },
       body: formData
     });
     
-    if (!response.ok) throw new Error('Failed to upload file');
+    console.log('Upload - Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Upload error response:', errorText);
+      throw new Error('Failed to upload file');
+    }
     return response.json();
   }
 };

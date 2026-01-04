@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
   Check,
+  CheckCheck,
   User,
   Clock,
   CheckCircle
@@ -70,6 +71,7 @@ const ChatView = ({ conversationId, onBack }) => {
       channel.bind('new-message', handleNewMessage);
       channel.bind('message-edited', handleMessageEdited);
       channel.bind('message-deleted', handleMessageDeleted);
+      channel.bind('messages-read', handleMessagesRead);
     }
 
     return () => {
@@ -77,10 +79,28 @@ const ChatView = ({ conversationId, onBack }) => {
     };
   }, [conversationId]);
 
+  // Mark user messages as read when viewing
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      const unreadUserMessages = messages.filter(m => m.sender === 'user' && m.status !== 'read');
+      if (unreadUserMessages.length > 0) {
+        markMessagesAsRead();
+      }
+    }
+  }, [messages, conversationId]);
+
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const markMessagesAsRead = async () => {
+    try {
+      await adminAPI.markAsRead(conversationId);
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
 
   const fetchConversation = async () => {
     try {
@@ -98,6 +118,8 @@ const ChatView = ({ conversationId, onBack }) => {
     // Only add if from user (admin messages are added locally)
     if (data.sender === 'user') {
       setMessages(prev => [...prev, data]);
+      // Mark as read immediately
+      markMessagesAsRead();
     }
   };
 
@@ -111,21 +133,49 @@ const ChatView = ({ conversationId, onBack }) => {
     setMessages(prev => prev.filter(msg => msg.id !== data.id));
   };
 
+  const handleMessagesRead = (data) => {
+    if (data.readBy === 'user') {
+      setMessages(prev => prev.map(msg => 
+        data.messageIds.includes(msg.id) ? { ...msg, status: 'read' } : msg
+      ));
+    }
+  };
+
   // Send text message
   const handleSend = async () => {
     if (!newMessage.trim() || sending) return;
 
+    const tempId = Date.now();
+    const messageText = newMessage;
+    
+    // Optimistic update
+    const tempMessage = {
+      id: tempId,
+      type: 'text',
+      content: messageText,
+      sender: 'admin',
+      senderName: 'پشتیبانی',
+      status: 'sending',
+      createdAt: new Date().toISOString()
+    };
+    
+    setMessages(prev => [...prev, tempMessage]);
+    setNewMessage('');
     setSending(true);
+
     try {
       const result = await adminAPI.sendMessage(conversationId, {
         type: 'text',
-        content: newMessage
+        content: messageText
       });
       
-      setMessages(prev => [...prev, result.message]);
-      setNewMessage('');
+      // Update with real data
+      setMessages(prev => prev.map(m => 
+        m.id === tempId ? { ...result.message, status: 'sent' } : m
+      ));
     } catch (error) {
       console.error('Failed to send message:', error);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       alert('خطا در ارسال پیام');
     } finally {
       setSending(false);
@@ -173,13 +223,15 @@ const ChatView = ({ conversationId, onBack }) => {
 
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const ext = mimeType.split('/')[1];
+        const fileName = `audio-${Date.now()}.${ext}`;
+        
+        // Create File object with proper name
+        const audioFile = new File([audioBlob], fileName, { type: mimeType });
         
         try {
           // Upload audio
-          const formData = new FormData();
-          formData.append('file', audioBlob, `audio-${Date.now()}.${mimeType.split('/')[1]}`);
-          
-          const uploadResult = await adminAPI.uploadMedia(audioBlob);
+          const uploadResult = await adminAPI.uploadMedia(audioFile);
           
           const result = await adminAPI.sendMessage(conversationId, {
             type: 'audio',
@@ -288,7 +340,21 @@ const ChatView = ({ conversationId, onBack }) => {
 
   const formatMessageTime = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  // Render message status ticks
+  const renderMessageStatus = (status) => {
+    if (status === 'sending') {
+      return <span className="msg-status sending">○</span>;
+    } else if (status === 'sent') {
+      return <Check size={14} className="msg-status sent" />;
+    } else if (status === 'delivered') {
+      return <CheckCheck size={14} className="msg-status delivered" />;
+    } else if (status === 'read') {
+      return <CheckCheck size={14} className="msg-status read" />;
+    }
+    return <Check size={14} className="msg-status sent" />;
   };
 
   if (loading) {
@@ -410,6 +476,7 @@ const ChatView = ({ conversationId, onBack }) => {
                 <div className="message-footer">
                   {msg.isEdited && <span className="edited-label">ویرایش شده</span>}
                   <span className="message-time">{formatMessageTime(msg.createdAt)}</span>
+                  {msg.sender === 'admin' && renderMessageStatus(msg.status)}
                 </div>
 
                 {/* Actions Menu - for all messages */}
