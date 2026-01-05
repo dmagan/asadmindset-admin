@@ -16,7 +16,10 @@ import {
   CheckCheck,
   User,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Reply,
+  CornerDownLeft,
+  ArrowDown
 } from 'lucide-react';
 import { adminAPI } from '../services/adminAPI';
 import { usePusher } from '../services/usePusher';
@@ -44,15 +47,49 @@ const ChatView = ({ conversationId, onBack }) => {
   const [editingMessage, setEditingMessage] = useState(null);
   const [editText, setEditText] = useState('');
   
+  // Reply
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  
+  // Scroll to bottom button
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  
   // Refs
   const messagesEndRef = useRef(null);
+  const messagesAreaRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const audioRefs = useRef({});
+  const inputRef = useRef(null);
+  const messageRefs = useRef({});
   
   const { subscribeToChannel, unsubscribe } = usePusher();
+  
+  // Scroll to message and highlight
+  const scrollToMessage = (messageId) => {
+    const messageElement = messageRefs.current[messageId];
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(messageId);
+      setTimeout(() => setHighlightedMessageId(null), 2000);
+    }
+  };
+
+  // Scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Handle scroll to show/hide scroll button
+  const handleScroll = () => {
+    if (messagesAreaRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesAreaRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+      setShowScrollButton(!isNearBottom);
+    }
+  };
 
   // Fetch conversation data
   useEffect(() => {
@@ -147,6 +184,7 @@ const ChatView = ({ conversationId, onBack }) => {
 
     const tempId = Date.now();
     const messageText = newMessage;
+    const replyTo = replyingTo;
     
     // Optimistic update
     const tempMessage = {
@@ -156,17 +194,20 @@ const ChatView = ({ conversationId, onBack }) => {
       sender: 'admin',
       senderName: 'پشتیبانی',
       status: 'sending',
+      replyTo: replyTo,
       createdAt: new Date().toISOString()
     };
     
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
+    setReplyingTo(null);
     setSending(true);
 
     try {
       const result = await adminAPI.sendMessage(conversationId, {
         type: 'text',
-        content: messageText
+        content: messageText,
+        replyToId: replyTo?.id
       });
       
       // Update with real data
@@ -181,18 +222,38 @@ const ChatView = ({ conversationId, onBack }) => {
       setSending(false);
     }
   };
+  
+  // Handle reply
+  const handleReply = (msg) => {
+    setReplyingTo({
+      id: msg.id,
+      type: msg.type,
+      content: msg.content || (msg.type === 'image' ? '📷 تصویر' : msg.type === 'audio' ? '🎤 پیام صوتی' : ''),
+      sender: msg.sender
+    });
+    setSelectedMessage(null);
+    inputRef.current?.focus();
+  };
+  
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
 
   // Handle image upload
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    const replyTo = replyingTo;
+    setReplyingTo(null);
+
     try {
       const uploadResult = await adminAPI.uploadMedia(file);
       
       const result = await adminAPI.sendMessage(conversationId, {
         type: 'image',
-        mediaUrl: uploadResult.url
+        mediaUrl: uploadResult.url,
+        replyToId: replyTo?.id
       });
       
       setMessages(prev => [...prev, result.message]);
@@ -225,9 +286,13 @@ const ChatView = ({ conversationId, onBack }) => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         const ext = mimeType.split('/')[1];
         const fileName = `audio-${Date.now()}.${ext}`;
+        const replyTo = replyingTo;
         
         // Create File object with proper name
         const audioFile = new File([audioBlob], fileName, { type: mimeType });
+        
+        // Clear reply before sending
+        setReplyingTo(null);
         
         try {
           // Upload audio
@@ -236,7 +301,8 @@ const ChatView = ({ conversationId, onBack }) => {
           const result = await adminAPI.sendMessage(conversationId, {
             type: 'audio',
             mediaUrl: uploadResult.url,
-            duration: recordingTime
+            duration: recordingTime,
+            replyToId: replyTo?.id
           });
           
           setMessages(prev => [...prev, result.message]);
@@ -387,11 +453,16 @@ const ChatView = ({ conversationId, onBack }) => {
       </div>
 
       {/* Messages */}
-      <div className="chat-messages">
+      <div 
+        className="chat-messages"
+        ref={messagesAreaRef}
+        onScroll={handleScroll}
+      >
         {messages.map((msg) => (
           <div 
             key={msg.id}
-            className={`message ${msg.sender === 'admin' ? 'admin' : 'user'} ${msg.type}`}
+            ref={el => messageRefs.current[msg.id] = el}
+            className={`message ${msg.sender === 'admin' ? 'admin' : 'user'} ${msg.type} ${highlightedMessageId === msg.id ? 'highlighted' : ''}`}
             onClick={() => setSelectedMessage(
               selectedMessage?.id === msg.id ? null : msg
             )}
@@ -415,6 +486,29 @@ const ChatView = ({ conversationId, onBack }) => {
               </div>
             ) : (
               <>
+                {/* Reply Preview */}
+                {msg.replyTo && (
+                  <div 
+                    className="reply-preview clickable"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      scrollToMessage(msg.replyTo.id);
+                    }}
+                  >
+                    <div className="reply-line"></div>
+                    <div className="reply-content">
+                      <span className="reply-sender">
+                        {msg.replyTo.sender === 'admin' ? 'پشتیبانی' : 'کاربر'}
+                      </span>
+                      <span className="reply-text">
+                        {msg.replyTo.type === 'text' 
+                          ? msg.replyTo.content?.substring(0, 50) + (msg.replyTo.content?.length > 50 ? '...' : '')
+                          : msg.replyTo.type === 'image' ? '📷 تصویر' : '🎤 پیام صوتی'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Text Message */}
                 {msg.type === 'text' && (
                   <p className="message-text">{msg.content}</p>
@@ -482,6 +576,10 @@ const ChatView = ({ conversationId, onBack }) => {
                 {/* Actions Menu - for all messages */}
                 {selectedMessage?.id === msg.id && (
                   <div className="message-actions" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => handleReply(msg)}>
+                      <Reply size={16} />
+                      پاسخ
+                    </button>
                     {msg.type === 'text' && msg.sender === 'admin' && (
                       <button onClick={() => handleStartEdit(msg)}>
                         <Edit3 size={16} />
@@ -511,8 +609,36 @@ const ChatView = ({ conversationId, onBack }) => {
         </div>
       )}
 
+      {/* Scroll to Bottom Button */}
+      {showScrollButton && (
+        <button className="scroll-to-bottom-btn" onClick={scrollToBottom}>
+          <ArrowDown size={20} />
+        </button>
+      )}
+
       {/* Input Area */}
       <div className="chat-input-area">
+        {/* Reply Bar */}
+        {replyingTo && (
+          <div className="reply-bar">
+            <div className="reply-bar-content">
+              <CornerDownLeft size={16} />
+              <div className="reply-bar-text">
+                <span className="reply-bar-sender">
+                  پاسخ به {replyingTo.sender === 'admin' ? 'پشتیبانی' : 'کاربر'}
+                </span>
+                <span className="reply-bar-message">
+                  {replyingTo.content?.substring(0, 40) || '📎 فایل'}
+                  {replyingTo.content?.length > 40 ? '...' : ''}
+                </span>
+              </div>
+            </div>
+            <button className="reply-bar-close" onClick={cancelReply}>
+              <X size={18} />
+            </button>
+          </div>
+        )}
+        
         {isRecording ? (
           <div className="recording-bar">
             <div className="recording-indicator">
@@ -525,7 +651,7 @@ const ChatView = ({ conversationId, onBack }) => {
             </button>
           </div>
         ) : (
-          <>
+          <div className="input-row">
             <button className="attach-btn" onClick={() => fileInputRef.current?.click()}>
               <Paperclip size={22} />
             </button>
@@ -537,6 +663,7 @@ const ChatView = ({ conversationId, onBack }) => {
               hidden
             />
             <input
+              ref={inputRef}
               type="text"
               placeholder="پیام خود را بنویسید..."
               value={newMessage}
@@ -550,7 +677,7 @@ const ChatView = ({ conversationId, onBack }) => {
             >
               {newMessage.trim() ? <Send size={22} /> : <Mic size={22} />}
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>

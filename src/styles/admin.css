@@ -1161,3 +1161,185 @@ body {
 .msg-status.read {
   color: #34b7f1;
 }
+
+
+/* Reply Preview in Message */
+.reply-preview {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.reply-preview .reply-line {
+  width: 3px;
+  background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+  border-radius: 2px;
+}
+
+.reply-preview .reply-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.reply-preview .reply-sender {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b5cf6;
+}
+
+.reply-preview .reply-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Reply Bar above Input */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 15px;
+  background: rgba(99, 102, 241, 0.1);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px 12px 0 0;
+  margin-bottom: -1px;
+}
+
+.reply-bar-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b5cf6;
+}
+
+.reply-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reply-bar-sender {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b5cf6;
+}
+
+.reply-bar-message {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.reply-bar-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.reply-bar-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chat-input-area .input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px;
+}
+
+/* Reply Preview Clickable */
+.reply-preview.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reply-preview.clickable:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Highlighted Message Animation - 3 pulses */
+.message.highlighted {
+  animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+  0% {
+    background: rgba(99, 102, 241, 0.5);
+    transform: scale(1.03);
+  }
+  15% {
+    background: rgba(99, 102, 241, 0.15);
+    transform: scale(1);
+  }
+  30% {
+    background: rgba(99, 102, 241, 0.5);
+    transform: scale(1.03);
+  }
+  45% {
+    background: rgba(99, 102, 241, 0.15);
+    transform: scale(1);
+  }
+  60% {
+    background: rgba(99, 102, 241, 0.5);
+    transform: scale(1.03);
+  }
+  100% {
+    background: transparent;
+    transform: scale(1);
+  }
+}
+
+/* Scroll to Bottom Button */
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(30, 30, 40, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.3s ease;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgba(99, 102, 241, 0.8);
+  transform: translateX(-50%) scale(1.1);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateX(-50%) scale(0.95);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
