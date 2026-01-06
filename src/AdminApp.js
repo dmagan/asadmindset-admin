@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Conversations from './components/Conversations';
@@ -12,6 +13,7 @@ const AdminApp = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const { subscribe, isConnected } = usePusher();
 
@@ -22,12 +24,10 @@ const AdminApp = () => {
     const unsubscribe = subscribe('admin-support', 'new-message', (data) => {
       console.log('New message received:', data);
       
-      // Update unread count if not viewing that conversation
       if (data.conversationId !== selectedConversationId) {
         setUnreadCount(prev => prev + 1);
       }
       
-      // Play notification sound
       playNotificationSound();
     });
 
@@ -35,7 +35,6 @@ const AdminApp = () => {
   }, [isLoggedIn, isConnected, selectedConversationId]);
 
   const playNotificationSound = () => {
-    // Create a simple beep
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -66,11 +65,17 @@ const AdminApp = () => {
   const handleViewConversation = (conversationId) => {
     setSelectedConversationId(conversationId);
     setCurrentPage('chat');
+    setSidebarOpen(false); // بستن سایدبار در موبایل
   };
 
   const handleBackToConversations = () => {
     setSelectedConversationId(null);
     setCurrentPage('conversations');
+  };
+
+  const handleNavigate = (page) => {
+    setCurrentPage(page);
+    setSidebarOpen(false); // بستن سایدبار در موبایل
   };
 
   if (!isLoggedIn) {
@@ -99,12 +104,25 @@ const AdminApp = () => {
 
   return (
     <div className="admin-app">
+      {/* دکمه منو برای موبایل */}
+      <button className="menu-toggle" onClick={() => setSidebarOpen(true)}>
+        <Menu size={24} />
+      </button>
+
+      {/* پس‌زمینه تیره */}
+      <div 
+        className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} 
+        onClick={() => setSidebarOpen(false)}
+      />
+
       <Sidebar 
         currentPage={currentPage} 
-        onNavigate={setCurrentPage}
+        onNavigate={handleNavigate}
         onLogout={handleLogout}
         unreadCount={unreadCount}
         isConnected={isConnected}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <main className="admin-main">
         {renderPage()}

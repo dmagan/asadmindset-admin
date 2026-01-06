@@ -5,10 +5,11 @@ import {
   Settings, 
   LogOut,
   Wifi,
-  WifiOff
+  WifiOff,
+  X
 } from 'lucide-react';
 
-const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, isConnected }) => {
+const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, isConnected, isOpen, onClose }) => {
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'داشبورد' },
     { id: 'conversations', icon: MessageSquare, label: 'گفتگوها', badge: unreadCount },
@@ -16,12 +17,18 @@ const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, isConnected }
   ];
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <span>🎯</span>
           <h2>Asad Mindset</h2>
         </div>
+        
+        {/* دکمه بستن برای موبایل */}
+        <button className="sidebar-close" onClick={onClose}>
+          <X size={20} />
+        </button>
+        
         <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
           {isConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
           <span>{isConnected ? 'متصل' : 'قطع'}</span>

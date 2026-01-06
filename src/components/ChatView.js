@@ -8,6 +8,7 @@ import {
   Play, 
   Pause,
   Image,
+  Video,
   MoreVertical,
   Edit3,
   Trash2,
@@ -19,7 +20,8 @@ import {
   CheckCircle,
   Reply,
   CornerDownLeft,
-  ArrowDown
+  ArrowDown,
+  Loader2
 } from 'lucide-react';
 import { adminAPI } from '../services/adminAPI';
 import { usePusher } from '../services/usePusher';
@@ -38,9 +40,16 @@ const ChatView = ({ conversationId, onBack }) => {
   // Audio playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   
   // Image zoom
   const [zoomedImage, setZoomedImage] = useState(null);
+  
+  // Video states
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingTempId, setUploadingTempId] = useState(null);
+  const [zoomedVideo, setZoomedVideo] = useState(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   
   // Edit/Delete
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -58,12 +67,14 @@ const ChatView = ({ conversationId, onBack }) => {
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const videoInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const audioRefs = useRef({});
   const inputRef = useRef(null);
   const messageRefs = useRef({});
+  const uploadXhrRef = useRef(null);
   
   const { subscribeToChannel, unsubscribe } = usePusher();
   
@@ -228,7 +239,7 @@ const ChatView = ({ conversationId, onBack }) => {
     setReplyingTo({
       id: msg.id,
       type: msg.type,
-      content: msg.content || (msg.type === 'image' ? '📷 تصویر' : msg.type === 'audio' ? '🎤 پیام صوتی' : ''),
+      content: msg.content || (msg.type === 'image' ? '📷 تصویر' : msg.type === 'video' ? '🎬 ویدیو' : msg.type === 'audio' ? '🎤 پیام صوتی' : ''),
       sender: msg.sender
     });
     setSelectedMessage(null);
@@ -263,6 +274,93 @@ const ChatView = ({ conversationId, onBack }) => {
     }
     
     e.target.value = '';
+  };
+
+  // Handle video upload
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert('حجم ویدیو نباید بیشتر از ۵۰ مگابایت باشد');
+      e.target.value = '';
+      return;
+    }
+
+    const replyTo = replyingTo;
+    setReplyingTo(null);
+    setUploadingVideo(true);
+
+    // Create temp message for optimistic UI
+    const tempId = Date.now();
+    setUploadingTempId(tempId);
+    
+    const tempMessage = {
+      id: tempId,
+      type: 'video',
+      content: '',
+      sender: 'admin',
+      senderName: 'پشتیبانی',
+      status: 'uploading',
+      replyTo: replyTo,
+      createdAt: new Date().toISOString(),
+      isUploading: true,
+      uploadProgress: 0
+    };
+    
+    setMessages(prev => [...prev, tempMessage]);
+
+    try {
+      // Upload with progress
+      const uploadResult = await adminAPI.uploadMediaWithProgress(
+        file, 
+        (progress) => {
+          setMessages(prev => prev.map(m => 
+            m.id === tempId ? { ...m, uploadProgress: progress } : m
+          ));
+        },
+        uploadXhrRef
+      );
+      
+      // Send video message
+      const result = await adminAPI.sendMessage(conversationId, {
+        type: 'video',
+        mediaUrl: uploadResult.url,
+        replyToId: replyTo?.id
+      });
+      
+      // Update temp message with real data
+      setMessages(prev => prev.map(m => 
+        m.id === tempId ? { ...result.message, status: 'sent', isUploading: false } : m
+      ));
+    } catch (error) {
+      console.error('Failed to upload video:', error);
+      if (error.message !== 'آپلود کنسل شد') {
+        alert('خطا در آپلود ویدیو: ' + error.message);
+      }
+      // Remove temp message on error
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+    } finally {
+      setUploadingVideo(false);
+      setUploadingTempId(null);
+      uploadXhrRef.current = null;
+      e.target.value = '';
+    }
+  };
+
+  // Cancel video upload
+  const cancelVideoUpload = () => {
+    if (uploadXhrRef.current) {
+      uploadXhrRef.current.abort();
+      uploadXhrRef.current = null;
+    }
+    if (uploadingTempId) {
+      setMessages(prev => prev.filter(m => m.id !== uploadingTempId));
+    }
+    setUploadingVideo(false);
+    setUploadingTempId(null);
   };
 
   // Start recording
@@ -345,19 +443,41 @@ const ChatView = ({ conversationId, onBack }) => {
       audio?.pause();
       setPlayingAudioId(null);
       setAudioCurrentTime(0);
+      setPlaybackSpeed(1);
     } else {
       if (playingAudioId && audioRefs.current[playingAudioId]) {
         audioRefs.current[playingAudioId].pause();
         audioRefs.current[playingAudioId].currentTime = 0;
       }
       setAudioCurrentTime(0);
+      setPlaybackSpeed(1);
       
       if (audio) {
+        audio.playbackRate = 1;
         audio.play()
           .then(() => setPlayingAudioId(msgId))
           .catch(err => console.error('Play error:', err));
       }
     }
+  };
+
+  // Toggle playback speed: 1x -> 1.5x -> 2x -> 1x
+  const togglePlaybackSpeed = (e, msgId) => {
+    e.stopPropagation();
+    const audio = audioRefs.current[msgId];
+    if (!audio) return;
+
+    let newSpeed;
+    if (playbackSpeed === 1) {
+      newSpeed = 1.5;
+    } else if (playbackSpeed === 1.5) {
+      newSpeed = 2;
+    } else {
+      newSpeed = 1;
+    }
+    
+    audio.playbackRate = newSpeed;
+    setPlaybackSpeed(newSpeed);
   };
 
   // Edit message
@@ -399,10 +519,11 @@ const ChatView = ({ conversationId, onBack }) => {
 
   // Format time
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  const totalSeconds = Math.floor(seconds);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
   const formatMessageTime = (dateString) => {
     const date = new Date(dateString);
@@ -503,7 +624,9 @@ const ChatView = ({ conversationId, onBack }) => {
                       <span className="reply-text">
                         {msg.replyTo.type === 'text' 
                           ? msg.replyTo.content?.substring(0, 50) + (msg.replyTo.content?.length > 50 ? '...' : '')
-                          : msg.replyTo.type === 'image' ? '📷 تصویر' : '🎤 پیام صوتی'}
+                          : msg.replyTo.type === 'image' ? '📷 تصویر' 
+                          : msg.replyTo.type === 'video' ? '🎬 ویدیو' 
+                          : '🎤 پیام صوتی'}
                       </span>
                     </div>
                   </div>
@@ -527,6 +650,56 @@ const ChatView = ({ conversationId, onBack }) => {
                   />
                 )}
 
+                {/* Video Message */}
+                {msg.type === 'video' && (
+                  <div className="video-message-container">
+                    {msg.isUploading ? (
+                      <div className="video-uploading">
+                        <Loader2 size={32} className="spinning" />
+                        <div className="upload-progress-bar">
+                          <div 
+                            className="upload-progress-fill" 
+                            style={{ width: `${msg.uploadProgress || 0}%` }}
+                          />
+                        </div>
+                        <span className="upload-progress-text">{msg.uploadProgress || 0}%</span>
+                        <button 
+                          className="cancel-upload-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            cancelVideoUpload();
+                          }}
+                        >
+                          <X size={18} />
+                          <span>انصراف</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div 
+                        className="video-thumbnail"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setZoomedVideo(msg.mediaUrl);
+                        }}
+                      >
+                        <video 
+                          src={msg.mediaUrl + '#t=0.5'}
+                          className="message-video-preview"
+                          preload="metadata"
+                          muted
+                          playsInline
+                          onLoadedData={(e) => {
+                            e.target.currentTime = 0.5;
+                          }}
+                        />
+                        <div className="video-play-overlay">
+                          <Play size={40} fill="white" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Audio Message */}
                 {msg.type === 'audio' && (
                   <div className={`audio-message ${playingAudioId === msg.id ? 'playing' : ''}`}>
@@ -544,25 +717,45 @@ const ChatView = ({ conversationId, onBack }) => {
                         <div key={i} className="wave-bar" />
                       ))}
                     </div>
-                    <span className="audio-time">
-                      {playingAudioId === msg.id 
-                        ? `${formatTime(audioCurrentTime)} / ${formatTime(msg.duration || 0)}`
-                        : formatTime(msg.duration || 0)
-                      }
-                    </span>
+                    <span className="audio-time" id={`audio-time-${msg.id}`}>
+  {playingAudioId === msg.id 
+    ? `${formatTime(audioCurrentTime)} / ${formatTime(msg.duration || audioRefs.current[msg.id]?.duration || 0)}`
+    : formatTime(msg.duration || audioRefs.current[msg.id]?.duration || 0)
+  }
+</span>
+                    {playingAudioId === msg.id && (
+                      <button 
+                        className="audio-speed-btn"
+                        onClick={(e) => togglePlaybackSpeed(e, msg.id)}
+                      >
+                        {playbackSpeed}x
+                      </button>
+                    )}
                     <audio
-                      ref={el => audioRefs.current[msg.id] = el}
-                      src={msg.mediaUrl}
-                      onTimeUpdate={(e) => {
-                        if (playingAudioId === msg.id) {
-                          setAudioCurrentTime(Math.floor(e.target.currentTime));
-                        }
-                      }}
-                      onEnded={() => {
-                        setPlayingAudioId(null);
-                        setAudioCurrentTime(0);
-                      }}
-                    />
+  ref={el => audioRefs.current[msg.id] = el}
+  src={msg.mediaUrl}
+  preload="metadata"
+  onLoadedMetadata={(e) => {
+    // Force re-render to show duration
+    if (!msg.duration && e.target.duration) {
+      const timeEl = document.getElementById(`audio-time-${msg.id}`);
+      if (timeEl && !timeEl.dataset.loaded) {
+        timeEl.dataset.loaded = 'true';
+        timeEl.textContent = formatTime(Math.floor(e.target.duration));
+      }
+    }
+  }}
+  onTimeUpdate={(e) => {
+    if (playingAudioId === msg.id) {
+      setAudioCurrentTime(Math.floor(e.target.currentTime));
+    }
+  }}
+  onEnded={() => {
+    setPlayingAudioId(null);
+    setAudioCurrentTime(0);
+    setPlaybackSpeed(1);
+  }}
+/>
                   </div>
                 )}
 
@@ -609,6 +802,22 @@ const ChatView = ({ conversationId, onBack }) => {
         </div>
       )}
 
+      {/* Video Modal */}
+      {zoomedVideo && (
+        <div className="video-modal" onClick={() => setZoomedVideo(null)}>
+          <button className="close-modal" onClick={() => setZoomedVideo(null)}>
+            <X size={24} />
+          </button>
+          <video 
+            src={zoomedVideo} 
+            controls 
+            autoPlay 
+            className="modal-video"
+            onClick={e => e.stopPropagation()} 
+          />
+        </div>
+      )}
+
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
         <button className="scroll-to-bottom-btn" onClick={scrollToBottom}>
@@ -652,14 +861,53 @@ const ChatView = ({ conversationId, onBack }) => {
           </div>
         ) : (
           <div className="input-row">
-            <button className="attach-btn" onClick={() => fileInputRef.current?.click()}>
-              <Paperclip size={22} />
-            </button>
+            <div className="attach-menu-container">
+              <button 
+                className="attach-btn" 
+                onClick={() => setShowAttachMenu(!showAttachMenu)}
+              >
+                <Paperclip size={22} />
+              </button>
+              
+              {showAttachMenu && (
+                <div className="attach-menu">
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setShowAttachMenu(false);
+                    }}
+                  >
+                    <Image size={20} />
+                    <span>تصویر</span>
+                  </button>
+                  <button 
+                    className="attach-menu-item"
+                    onClick={() => {
+                      videoInputRef.current?.click();
+                      setShowAttachMenu(false);
+                    }}
+                    disabled={uploadingVideo}
+                  >
+                    <Video size={20} />
+                    <span>ویدیو</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleImageUpload}
               accept="image/*"
+              hidden
+            />
+            <input
+              type="file"
+              ref={videoInputRef}
+              onChange={handleVideoUpload}
+              accept="video/*"
               hidden
             />
             <input
@@ -673,7 +921,7 @@ const ChatView = ({ conversationId, onBack }) => {
             <button 
               className="send-btn"
               onClick={newMessage.trim() ? handleSend : startRecording}
-              disabled={sending}
+              disabled={sending || uploadingVideo}
             >
               {newMessage.trim() ? <Send size={22} /> : <Mic size={22} />}
             </button>

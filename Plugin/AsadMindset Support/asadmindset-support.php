@@ -174,6 +174,7 @@ class AsadMindset_Support {
             status varchar(20) DEFAULT 'sent',
             is_read tinyint(1) DEFAULT 0,
             is_edited tinyint(1) DEFAULT 0,
+            reply_to_id bigint(20) DEFAULT NULL,
             delivered_at datetime DEFAULT NULL,
             read_at datetime DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -565,19 +566,37 @@ class AsadMindset_Support {
         ));
         
         // Format messages
-        $formatted_messages = array_map(function($msg) {
-            return array(
-                'id' => (int) $msg->id,
-                'type' => $msg->message_type,
-                'content' => $msg->content,
-                'mediaUrl' => $msg->media_url,
-                'duration' => (int) $msg->duration,
-                'sender' => $msg->sender_type,
-                'isEdited' => (bool) $msg->is_edited,
-                'status' => $msg->status ?: 'sent',
-                'createdAt' => $msg->created_at
+        $formatted_messages = array_map(function($msg) use ($wpdb, $table_messages) {
+    $result = array(
+        'id' => (int) $msg->id,
+        'type' => $msg->message_type,
+        'content' => $msg->content,
+        'mediaUrl' => $msg->media_url,
+        'duration' => (int) $msg->duration,
+        'sender' => $msg->sender_type,
+        'isEdited' => (bool) $msg->is_edited,
+        'status' => $msg->status ?: 'sent',
+        'createdAt' => $msg->created_at,
+        'replyTo' => null
+    );
+    
+    if (!empty($msg->reply_to_id)) {
+        $reply_msg = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
+            $msg->reply_to_id
+        ));
+        if ($reply_msg) {
+            $result['replyTo'] = array(
+                'id' => (int) $reply_msg->id,
+                'type' => $reply_msg->message_type,
+                'content' => $reply_msg->content,
+                'sender' => $reply_msg->sender_type
             );
-        }, $messages);
+        }
+    }
+    
+    return $result;
+}, $messages);
         
         return rest_ensure_response(array(
             'conversationId' => (int) $conversation->id,
@@ -611,15 +630,16 @@ class AsadMindset_Support {
         
         // Insert message
         $message_data = array(
-            'conversation_id' => $conversation->id,
-            'sender_type' => 'user',
-            'sender_id' => $user_id,
-            'message_type' => isset($params['type']) ? $params['type'] : 'text',
-            'content' => isset($params['content']) ? $params['content'] : '',
-            'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
-            'duration' => isset($params['duration']) ? (int) $params['duration'] : 0,
-            'status' => 'sent'
-        );
+    'conversation_id' => $conversation->id,
+    'sender_type' => 'user',
+    'sender_id' => $user_id,
+    'message_type' => isset($params['type']) ? $params['type'] : 'text',
+    'content' => isset($params['content']) ? $params['content'] : '',
+    'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
+    'duration' => isset($params['duration']) ? (int) $params['duration'] : 0,
+    'reply_to_id' => isset($params['replyToId']) ? (int) $params['replyToId'] : null,
+    'status' => 'sent'
+);
         
         $wpdb->insert($table_messages, $message_data);
         $message_id = $wpdb->insert_id;
@@ -633,6 +653,23 @@ class AsadMindset_Support {
         // Get user info
         $user = get_user_by('id', $user_id);
         
+        // Get replyTo data if exists
+        $reply_to_data = null;
+        if (!empty($params['replyToId'])) {
+            $reply_msg = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
+                $params['replyToId']
+            ));
+            if ($reply_msg) {
+                $reply_to_data = array(
+                    'id' => (int) $reply_msg->id,
+                    'type' => $reply_msg->message_type,
+                    'content' => $reply_msg->content,
+                    'sender' => $reply_msg->sender_type
+                );
+            }
+        }
+        
         // Prepare message for Pusher
         $pusher_message = array(
             'id' => $message_id,
@@ -645,7 +682,8 @@ class AsadMindset_Support {
             'isEdited' => false,
             'status' => 'sent',
             'createdAt' => current_time('mysql'),
-            'conversationId' => $conversation->id
+            'conversationId' => $conversation->id,
+            'replyTo' => $reply_to_data
         );
         
         // Trigger Pusher event - to conversation channel (for user)
@@ -961,8 +999,8 @@ class AsadMindset_Support {
             array('conversation_id' => $conversation_id, 'sender_type' => 'user')
         );
         
-        $formatted_messages = array_map(function($msg) {
-            return array(
+        $formatted_messages = array_map(function($msg) use ($wpdb, $table_messages) {
+            $result = array(
                 'id' => (int) $msg->id,
                 'type' => $msg->message_type,
                 'content' => $msg->content,
@@ -972,8 +1010,27 @@ class AsadMindset_Support {
                 'isEdited' => (bool) $msg->is_edited,
                 'isRead' => (bool) $msg->is_read,
                 'status' => $msg->status ?: 'sent',
-                'createdAt' => $msg->created_at
+                'createdAt' => $msg->created_at,
+                'replyTo' => null
             );
+            
+            // Get replyTo data if exists
+            if (!empty($msg->reply_to_id)) {
+                $reply_msg = $wpdb->get_row($wpdb->prepare(
+                    "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
+                    $msg->reply_to_id
+                ));
+                if ($reply_msg) {
+                    $result['replyTo'] = array(
+                        'id' => (int) $reply_msg->id,
+                        'type' => $reply_msg->message_type,
+                        'content' => $reply_msg->content,
+                        'sender' => $reply_msg->sender_type
+                    );
+                }
+            }
+            
+            return $result;
         }, $messages);
         
         return rest_ensure_response(array(
@@ -1011,6 +1068,7 @@ class AsadMindset_Support {
             'content' => isset($params['content']) ? $params['content'] : '',
             'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
             'duration' => isset($params['duration']) ? (int) $params['duration'] : 0,
+            'reply_to_id' => isset($params['replyToId']) ? (int) $params['replyToId'] : null,
             'status' => 'sent'
         );
         
@@ -1022,6 +1080,23 @@ class AsadMindset_Support {
             array('updated_at' => current_time('mysql')),
             array('id' => $conversation_id)
         );
+        
+        // Get replyTo data if exists
+        $reply_to_data = null;
+        if (!empty($params['replyToId'])) {
+            $reply_msg = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
+                $params['replyToId']
+            ));
+            if ($reply_msg) {
+                $reply_to_data = array(
+                    'id' => (int) $reply_msg->id,
+                    'type' => $reply_msg->message_type,
+                    'content' => $reply_msg->content,
+                    'sender' => $reply_msg->sender_type
+                );
+            }
+        }
         
         // Prepare message for Pusher
         $pusher_message = array(
@@ -1035,7 +1110,8 @@ class AsadMindset_Support {
             'isEdited' => false,
             'status' => 'sent',
             'createdAt' => current_time('mysql'),
-            'conversationId' => $conversation_id
+            'conversationId' => $conversation_id,
+            'replyTo' => $reply_to_data
         );
         
         // Trigger Pusher event
