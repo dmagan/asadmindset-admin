@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import Conversations from './components/Conversations';
 import ChatView from './components/ChatView';
 import Settings from './components/Settings';
+import ChannelManager from './components/ChannelManager';
 import Login from './components/Login';
 import { usePusher } from './services/usePusher';
 
@@ -95,6 +96,8 @@ const AdminApp = () => {
             onBack={handleBackToConversations}
           />
         );
+      case 'channel':
+        return <ChannelManager />;
       case 'settings':
         return <Settings />;
       default:

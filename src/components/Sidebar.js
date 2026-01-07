@@ -6,13 +6,15 @@ import {
   LogOut,
   Wifi,
   WifiOff,
-  X
+  X,
+  Radio
 } from 'lucide-react';
 
 const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, isConnected, isOpen, onClose }) => {
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'داشبورد' },
     { id: 'conversations', icon: MessageSquare, label: 'گفتگوها', badge: unreadCount },
+    { id: 'channel', icon: Radio, label: 'کانال آلفا' },
     { id: 'settings', icon: Settings, label: 'تنظیمات' }
   ];
 

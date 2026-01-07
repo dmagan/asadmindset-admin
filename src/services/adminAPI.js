@@ -207,5 +207,75 @@ export const adminAPI = {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(formData);
     });
+  },
+
+  // ==========================================
+  // Alpha Channel Methods
+  // ==========================================
+
+  // Get channel posts
+  async getChannelPosts(page = 1, perPage = 20) {
+    const response = await fetch(`${API_URL}/admin/channel/posts?page=${page}&per_page=${perPage}`, {
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch channel posts');
+    return response.json();
+  },
+
+  // Get channel stats
+  async getChannelStats() {
+    const response = await fetch(`${API_URL}/admin/channel/stats`, {
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch channel stats');
+    return response.json();
+  },
+
+  // Create channel post
+  async createChannelPost(postData) {
+    const response = await fetch(`${API_URL}/admin/channel/posts`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(postData)
+    });
+    
+    if (!response.ok) throw new Error('Failed to create post');
+    return response.json();
+  },
+
+  // Update channel post
+  async updateChannelPost(postId, postData) {
+    const response = await fetch(`${API_URL}/admin/channel/posts/${postId}`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify(postData)
+    });
+    
+    if (!response.ok) throw new Error('Failed to update post');
+    return response.json();
+  },
+
+  // Delete channel post
+  async deleteChannelPost(postId) {
+    const response = await fetch(`${API_URL}/admin/channel/posts/${postId}`, {
+      method: 'DELETE',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to delete post');
+    return response.json();
+  },
+
+  // Toggle pin
+  async toggleChannelPostPin(postId) {
+    const response = await fetch(`${API_URL}/admin/channel/posts/${postId}/pin`, {
+      method: 'POST',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to toggle pin');
+    return response.json();
   }
 };

@@ -771,7 +771,7 @@ const ChatView = ({ conversationId, onBack }) => {
                   <div className="message-actions" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handleReply(msg)}>
                       <Reply size={16} />
-                      پاسخ
+                      Reply
                     </button>
                     {msg.type === 'text' && msg.sender === 'admin' && (
                       <button onClick={() => handleStartEdit(msg)}>
@@ -862,15 +862,20 @@ const ChatView = ({ conversationId, onBack }) => {
         ) : (
           <div className="input-row">
             <div className="attach-menu-container">
-              <button 
-                className="attach-btn" 
-                onClick={() => setShowAttachMenu(!showAttachMenu)}
-              >
-                <Paperclip size={22} />
-              </button>
-              
-              {showAttachMenu && (
-                <div className="attach-menu">
+  <button 
+    className="attach-btn" 
+    onClick={() => setShowAttachMenu(!showAttachMenu)}
+  >
+    <Paperclip size={22} />
+  </button>
+  
+  {showAttachMenu && (
+    <>
+      <div 
+        className="attach-menu-overlay" 
+        onClick={() => setShowAttachMenu(false)}
+      />
+      <div className="attach-menu">
                   <button 
                     className="attach-menu-item"
                     onClick={() => {
@@ -879,7 +884,7 @@ const ChatView = ({ conversationId, onBack }) => {
                     }}
                   >
                     <Image size={20} />
-                    <span>تصویر</span>
+                    <span>Photo</span>
                   </button>
                   <button 
                     className="attach-menu-item"
@@ -890,11 +895,12 @@ const ChatView = ({ conversationId, onBack }) => {
                     disabled={uploadingVideo}
                   >
                     <Video size={20} />
-                    <span>ویدیو</span>
+                    <span>Video</span>
                   </button>
-                </div>
-              )}
             </div>
+    </>
+  )}
+</div>
             
             <input
               type="file"
