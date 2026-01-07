@@ -449,7 +449,7 @@ class AsadMindset_Support {
     /**
      * Get current user ID from token
      */
-    private function get_user_id_from_request($request) {
+    public function get_user_id_from_request($request) {
         $token = $this->get_bearer_token($request);
         return $this->validate_jwt_token($token);
     }
@@ -467,7 +467,7 @@ class AsadMindset_Support {
     /**
      * Trigger Pusher event
      */
-    private function trigger_pusher_event($channel, $event, $data) {
+    public function trigger_pusher_event($channel, $event, $data) {
         $url = 'https://api-' . PUSHER_CLUSTER . '.pusher.com/apps/' . PUSHER_APP_ID . '/events';
         
         $body = json_encode(array(
@@ -1334,3 +1334,6 @@ class AsadMindset_Support {
 
 // Initialize plugin
 AsadMindset_Support::get_instance();
+
+// Include Alpha Channel module
+require_once plugin_dir_path(__FILE__) . 'alpha-channel.php';
