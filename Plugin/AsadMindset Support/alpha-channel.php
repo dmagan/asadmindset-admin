@@ -41,9 +41,11 @@ class Alpha_Channel {
             media_duration int(11) DEFAULT 0,
             views_count int(11) DEFAULT 0,
             is_pinned tinyint(1) DEFAULT 0,
+            pin_expires_at datetime DEFAULT NULL,
             is_edited tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            reply_to_id bigint(20) DEFAULT NULL,
             PRIMARY KEY (id),
             KEY is_pinned (is_pinned),
             KEY created_at (created_at)
@@ -253,8 +255,14 @@ class Alpha_Channel {
         $per_page = (int) $request->get_param('per_page') ?: 20;
         $offset = ($page - 1) * $per_page;
         
-        $table_posts = $wpdb->prefix . 'alpha_channel_posts';
+       $table_posts = $wpdb->prefix . 'alpha_channel_posts';
         $table_reactions = $wpdb->prefix . 'alpha_channel_reactions';
+        
+        // Auto-unpin expired posts
+        $wpdb->query(
+            "UPDATE $table_posts SET is_pinned = 0, pin_expires_at = NULL 
+             WHERE is_pinned = 1 AND pin_expires_at IS NOT NULL AND pin_expires_at < NOW()"
+        );
         
         // Get total count
         $total = $wpdb->get_var("SELECT COUNT(*) FROM $table_posts");
@@ -281,21 +289,22 @@ class Alpha_Channel {
         }
         
         $formatted_posts = array_map(function($post) {
-            return array(
-                'id' => (int) $post->id,
-                'content' => $post->content,
-                'mediaType' => $post->media_type,
-                'mediaUrl' => $post->media_url,
-                'mediaDuration' => (int) $post->media_duration,
-                'viewsCount' => (int) $post->views_count + 1,
-                'reactionsCount' => (int) $post->reactions_count,
-                'userReacted' => (bool) $post->user_reacted,
-                'isPinned' => (bool) $post->is_pinned,
-                'isEdited' => (bool) $post->is_edited,
-                'createdAt' => $post->created_at,
-                'updatedAt' => $post->updated_at
-            );
-        }, $posts);
+    return array(
+        'id' => (int) $post->id,
+        'content' => $post->content,
+        'mediaType' => $post->media_type,
+        'mediaUrl' => $post->media_url,
+        'mediaDuration' => (int) $post->media_duration,
+        'viewsCount' => (int) $post->views_count + 1,
+        'reactionsCount' => (int) $post->reactions_count,
+        'userReacted' => (bool) $post->user_reacted,
+        'isPinned' => (bool) $post->is_pinned,
+        'isEdited' => (bool) $post->is_edited,
+        'createdAt' => $post->created_at,
+        'updatedAt' => $post->updated_at,
+        'replyToId' => $post->reply_to_id ? (int) $post->reply_to_id : null
+    );
+}, $posts);
         
         return rest_ensure_response(array(
             'success' => true,
@@ -349,7 +358,8 @@ class Alpha_Channel {
                 'isPinned' => (bool) $post->is_pinned,
                 'isEdited' => (bool) $post->is_edited,
                 'createdAt' => $post->created_at,
-                'updatedAt' => $post->updated_at
+                'updatedAt' => $post->updated_at,
+                'replyToId' => $post->reply_to_id ? (int) $post->reply_to_id : null
             )
         ));
     }
@@ -589,7 +599,8 @@ class Alpha_Channel {
                 'isPinned' => (bool) $post->is_pinned,
                 'isEdited' => (bool) $post->is_edited,
                 'createdAt' => $post->created_at,
-                'updatedAt' => $post->updated_at
+                'updatedAt' => $post->updated_at,
+                'replyToId' => $post->reply_to_id ? (int) $post->reply_to_id : null
             );
         }, $posts);
         
@@ -615,13 +626,14 @@ class Alpha_Channel {
         
         $table_posts = $wpdb->prefix . 'alpha_channel_posts';
         
-        $wpdb->insert($table_posts, array(
-            'content' => isset($params['content']) ? $params['content'] : '',
-            'media_type' => isset($params['mediaType']) ? $params['mediaType'] : null,
-            'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
-            'media_duration' => isset($params['mediaDuration']) ? (int) $params['mediaDuration'] : 0,
-            'is_pinned' => isset($params['isPinned']) ? (int) $params['isPinned'] : 0
-        ));
+       $wpdb->insert($table_posts, array(
+    'content' => isset($params['content']) ? $params['content'] : '',
+    'media_type' => isset($params['mediaType']) ? $params['mediaType'] : null,
+    'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
+    'media_duration' => isset($params['mediaDuration']) ? (int) $params['mediaDuration'] : 0,
+    'is_pinned' => isset($params['isPinned']) ? (int) $params['isPinned'] : 0,
+    'reply_to_id' => isset($params['replyToId']) ? (int) $params['replyToId'] : null
+));
         
         $post_id = $wpdb->insert_id;
         
@@ -631,17 +643,18 @@ class Alpha_Channel {
         ));
         
         $post_data = array(
-            'id' => (int) $post->id,
-            'content' => $post->content,
-            'mediaType' => $post->media_type,
-            'mediaUrl' => $post->media_url,
-            'mediaDuration' => (int) $post->media_duration,
-            'viewsCount' => 0,
-            'reactionsCount' => 0,
-            'isPinned' => (bool) $post->is_pinned,
-            'isEdited' => false,
-            'createdAt' => $post->created_at
-        );
+    'id' => (int) $post->id,
+    'content' => $post->content,
+    'mediaType' => $post->media_type,
+    'mediaUrl' => $post->media_url,
+    'mediaDuration' => (int) $post->media_duration,
+    'viewsCount' => 0,
+    'reactionsCount' => 0,
+    'isPinned' => (bool) $post->is_pinned,
+    'isEdited' => false,
+    'createdAt' => $post->created_at,
+    'replyToId' => $post->reply_to_id ? (int) $post->reply_to_id : null
+);
         
         // Trigger Pusher event for real-time update
         $this->trigger_pusher_event('alpha-channel', 'new-post', $post_data);
@@ -741,13 +754,15 @@ class Alpha_Channel {
         return rest_ensure_response(array('success' => true));
     }
     
-    /**
+   /**
      * Toggle pin status (admin)
      */
     public function toggle_pin($request) {
         global $wpdb;
         
         $post_id = (int) $request->get_param('id');
+        $params = $request->get_json_params();
+        $duration = isset($params['duration']) ? $params['duration'] : null;
         
         $table_posts = $wpdb->prefix . 'alpha_channel_posts';
         
@@ -758,21 +773,42 @@ class Alpha_Channel {
         ));
         
         $new_status = $current ? 0 : 1;
+        $pin_expires_at = null;
+        
+        // Calculate expiry time if pinning
+        if ($new_status && $duration) {
+            switch ($duration) {
+                case '24h':
+                    $pin_expires_at = date('Y-m-d H:i:s', strtotime('+24 hours'));
+                    break;
+                case '1w':
+                    $pin_expires_at = date('Y-m-d H:i:s', strtotime('+1 week'));
+                    break;
+                case '30d':
+                    $pin_expires_at = date('Y-m-d H:i:s', strtotime('+30 days'));
+                    break;
+            }
+        }
         
         $wpdb->update($table_posts,
-            array('is_pinned' => $new_status),
+            array(
+                'is_pinned' => $new_status,
+                'pin_expires_at' => $pin_expires_at
+            ),
             array('id' => $post_id)
         );
         
         // Trigger Pusher event
         $this->trigger_pusher_event('alpha-channel', 'post-pinned', array(
             'id' => $post_id,
-            'isPinned' => (bool) $new_status
+            'isPinned' => (bool) $new_status,
+            'pinExpiresAt' => $pin_expires_at
         ));
         
         return rest_ensure_response(array(
             'success' => true,
-            'isPinned' => (bool) $new_status
+            'isPinned' => (bool) $new_status,
+            'pinExpiresAt' => $pin_expires_at
         ));
     }
     

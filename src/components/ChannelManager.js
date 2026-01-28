@@ -175,16 +175,31 @@ const ChannelManager = () => {
     e.target.value = '';
   };
 
-  // Start recording
+// Start recording
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
+      // Check supported mime types in order of preference
       let mimeType = 'audio/webm';
-      if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4';
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        mimeType = 'audio/webm';
+      let extension = 'webm';
+      
+      const mimeTypes = [
+        { mime: 'audio/webm;codecs=opus', ext: 'webm' },
+        { mime: 'audio/webm', ext: 'webm' },
+        { mime: 'audio/mp4', ext: 'm4a' },
+        { mime: 'audio/mp4;codecs=mp4a.40.2', ext: 'm4a' },
+        { mime: 'audio/ogg;codecs=opus', ext: 'ogg' },
+        { mime: 'audio/wav', ext: 'wav' }
+      ];
+      
+      for (const type of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(type.mime)) {
+          mimeType = type.mime;
+          extension = type.ext;
+          console.log('Using mime type:', mimeType, 'extension:', extension);
+          break;
+        }
       }
       
       mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
@@ -195,10 +210,18 @@ const ChannelManager = () => {
       };
 
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        // Get the actual mime type used
+        const actualMime = mediaRecorderRef.current.mimeType || mimeType;
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMime });
         const audioUrl = URL.createObjectURL(audioBlob);
         
-        setMediaFile(audioBlob);
+        // Create a File object with proper name and extension
+        const fileName = `recording_${Date.now()}.${extension}`;
+        const audioFile = new File([audioBlob], fileName, { type: actualMime });
+        
+        console.log('Audio file created:', fileName, 'type:', actualMime, 'size:', audioFile.size);
+        
+        setMediaFile(audioFile);
         setMediaType('audio');
         setMediaPreview(audioUrl);
         setMediaUrl('');

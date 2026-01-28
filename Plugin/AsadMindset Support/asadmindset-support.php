@@ -795,7 +795,40 @@ class AsadMindset_Support {
         // Get extension
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         
-        // Define allowed types
+        // If no extension, try to get from mime type
+        if (empty($ext) && !empty($file['type'])) {
+            $mime_to_ext = array(
+                'audio/webm' => 'webm',
+                'audio/mp4' => 'm4a',
+                'audio/x-m4a' => 'm4a',
+                'audio/mpeg' => 'mp3',
+                'audio/ogg' => 'ogg',
+                'audio/wav' => 'wav',
+                'video/mp4' => 'mp4',
+                'video/webm' => 'webm',
+                'video/quicktime' => 'mov',
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp'
+            );
+            
+            // Clean mime type (remove codecs part)
+            $clean_mime = preg_replace('/;.*$/', '', $file['type']);
+            
+            if (isset($mime_to_ext[$clean_mime])) {
+                $ext = $mime_to_ext[$clean_mime];
+                // Also fix the filename
+                $file['name'] = pathinfo($file['name'], PATHINFO_FILENAME) . '.' . $ext;
+                if (empty(pathinfo($file['name'], PATHINFO_FILENAME))) {
+                    $file['name'] = 'upload_' . time() . '.' . $ext;
+                }
+            }
+            
+            error_log('Extension from mime type: ' . $ext . ' (mime: ' . $file['type'] . ')');
+        }
+        
+       // Define allowed types
         $audio_mimes = array(
             'webm' => 'audio/webm',
             'mp4' => 'audio/mp4',
@@ -814,7 +847,25 @@ class AsadMindset_Support {
             'webp' => 'image/webp'
         );
         
-        $all_mimes = array_merge($audio_mimes, $image_mimes);
+        $video_mimes = array(
+            'mov' => 'video/quicktime',
+            'avi' => 'video/x-msvideo',
+            'm4v' => 'video/x-m4v',
+            'mkv' => 'video/x-matroska',
+            '3gp' => 'video/3gpp'
+        );
+        
+        // mp4 and webm can be both audio and video - handle by checking actual mime
+        $dual_mimes = array(
+            'mp4' => array('video/mp4', 'audio/mp4'),
+            'webm' => array('video/webm', 'audio/webm')
+        );
+        
+        $all_mimes = array_merge($audio_mimes, $image_mimes, $video_mimes);
+        
+        // For mp4 and webm, accept both audio and video
+        $all_mimes['mp4'] = 'video/mp4';
+        $all_mimes['webm'] = 'video/webm';
         
         // Check if extension is allowed
         if (!isset($all_mimes[$ext])) {
@@ -823,7 +874,15 @@ class AsadMindset_Support {
         }
         
         // Force the correct MIME type based on extension
+        // For mp4 and webm, use the actual file mime type if available
         $correct_mime = $all_mimes[$ext];
+        if (($ext === 'mp4' || $ext === 'webm') && !empty($file['type'])) {
+            if (strpos($file['type'], 'audio') !== false) {
+                $correct_mime = 'audio/' . $ext;
+            } elseif (strpos($file['type'], 'video') !== false) {
+                $correct_mime = 'video/' . $ext;
+            }
+        }
         
         // Override WordPress MIME check completely for this upload
         add_filter('wp_check_filetype_and_ext', function($data) use ($ext, $correct_mime, $file) {
