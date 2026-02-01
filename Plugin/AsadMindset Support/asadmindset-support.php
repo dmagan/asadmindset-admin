@@ -240,6 +240,13 @@ class AsadMindset_Support {
             'permission_callback' => array($this, 'check_user_auth')
         ));
         
+        // User typing indicator
+        register_rest_route($namespace, '/conversation/typing', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'user_typing'),
+            'permission_callback' => array($this, 'check_user_auth')
+        ));
+        
         // === Admin Routes ===
         
         // Admin login
@@ -274,6 +281,13 @@ class AsadMindset_Support {
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/message', array(
             'methods' => 'POST',
             'callback' => array($this, 'send_admin_message'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
+        
+        // Admin typing indicator
+        register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/typing', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'admin_typing'),
             'permission_callback' => array($this, 'check_admin_auth')
         ));
         
@@ -567,36 +581,36 @@ class AsadMindset_Support {
         
         // Format messages
         $formatted_messages = array_map(function($msg) use ($wpdb, $table_messages) {
-    $result = array(
-        'id' => (int) $msg->id,
-        'type' => $msg->message_type,
-        'content' => $msg->content,
-        'mediaUrl' => $msg->media_url,
-        'duration' => (int) $msg->duration,
-        'sender' => $msg->sender_type,
-        'isEdited' => (bool) $msg->is_edited,
-        'status' => $msg->status ?: 'sent',
-        'createdAt' => $msg->created_at,
-        'replyTo' => null
-    );
-    
-    if (!empty($msg->reply_to_id)) {
-        $reply_msg = $wpdb->get_row($wpdb->prepare(
-            "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
-            $msg->reply_to_id
-        ));
-        if ($reply_msg) {
-            $result['replyTo'] = array(
-                'id' => (int) $reply_msg->id,
-                'type' => $reply_msg->message_type,
-                'content' => $reply_msg->content,
-                'sender' => $reply_msg->sender_type
+            $result = array(
+                'id' => (int) $msg->id,
+                'type' => $msg->message_type,
+                'content' => $msg->content,
+                'mediaUrl' => $msg->media_url,
+                'duration' => (int) $msg->duration,
+                'sender' => $msg->sender_type,
+                'isEdited' => (bool) $msg->is_edited,
+                'status' => $msg->status ?: 'sent',
+                'createdAt' => $msg->created_at,
+                'replyTo' => null
             );
-        }
-    }
-    
-    return $result;
-}, $messages);
+            
+            if (!empty($msg->reply_to_id)) {
+                $reply_msg = $wpdb->get_row($wpdb->prepare(
+                    "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
+                    $msg->reply_to_id
+                ));
+                if ($reply_msg) {
+                    $result['replyTo'] = array(
+                        'id' => (int) $reply_msg->id,
+                        'type' => $reply_msg->message_type,
+                        'content' => $reply_msg->content,
+                        'sender' => $reply_msg->sender_type
+                    );
+                }
+            }
+            
+            return $result;
+        }, $messages);
         
         return rest_ensure_response(array(
             'conversationId' => (int) $conversation->id,
@@ -630,16 +644,16 @@ class AsadMindset_Support {
         
         // Insert message
         $message_data = array(
-    'conversation_id' => $conversation->id,
-    'sender_type' => 'user',
-    'sender_id' => $user_id,
-    'message_type' => isset($params['type']) ? $params['type'] : 'text',
-    'content' => isset($params['content']) ? $params['content'] : '',
-    'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
-    'duration' => isset($params['duration']) ? (int) $params['duration'] : 0,
-    'reply_to_id' => isset($params['replyToId']) ? (int) $params['replyToId'] : null,
-    'status' => 'sent'
-);
+            'conversation_id' => $conversation->id,
+            'sender_type' => 'user',
+            'sender_id' => $user_id,
+            'message_type' => isset($params['type']) ? $params['type'] : 'text',
+            'content' => isset($params['content']) ? $params['content'] : '',
+            'media_url' => isset($params['mediaUrl']) ? $params['mediaUrl'] : null,
+            'duration' => isset($params['duration']) ? (int) $params['duration'] : 0,
+            'reply_to_id' => isset($params['replyToId']) ? (int) $params['replyToId'] : null,
+            'status' => 'sent'
+        );
         
         $wpdb->insert($table_messages, $message_data);
         $message_id = $wpdb->insert_id;
@@ -828,7 +842,7 @@ class AsadMindset_Support {
             error_log('Extension from mime type: ' . $ext . ' (mime: ' . $file['type'] . ')');
         }
         
-       // Define allowed types
+        // Define allowed types
         $audio_mimes = array(
             'webm' => 'audio/webm',
             'mp4' => 'audio/mp4',
@@ -946,7 +960,7 @@ class AsadMindset_Support {
         $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : 'your-secret-key';
         
         $issuedAt = time();
-        $expire = $issuedAt + (DAY_IN_SECONDS * 7);
+        $expire = $issuedAt + (DAY_IN_SECONDS * 30);
         
         $payload = array(
             'iss' => get_bloginfo('url'),
@@ -1264,7 +1278,7 @@ class AsadMindset_Support {
         
         // Get user's conversation
         $conversation = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_conversations WHERE user_id = %d",
+            "SELECT * FROM $table_conversations WHERE user_id = %d ORDER BY id DESC LIMIT 1",
             $user_id
         ));
         
@@ -1299,6 +1313,97 @@ class AsadMindset_Support {
                 'readBy' => 'user'
             ));
         }
+        
+        return rest_ensure_response(array(
+            'success' => true
+        ));
+    }
+    
+    /**
+     * User typing indicator
+     */
+    public function user_typing($request) {
+        global $wpdb;
+        
+        $user_id = $this->get_user_id_from_request($request);
+        $params = $request->get_json_params();
+        $is_typing = isset($params['isTyping']) ? (bool) $params['isTyping'] : true;
+        $is_recording = isset($params['isRecording']) ? (bool) $params['isRecording'] : false;
+        
+        // Check if user is admin
+        $user = get_user_by('id', $user_id);
+        $is_admin = $user && user_can($user, 'manage_options');
+        
+        $table_conversations = $wpdb->prefix . 'support_conversations';
+        
+        // Get conversation
+        if ($is_admin) {
+            // Admin needs to specify which conversation (from params or get first open one)
+            $conversation_id = isset($params['conversationId']) ? (int) $params['conversationId'] : null;
+            
+            if ($conversation_id) {
+                $conversation = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM $table_conversations WHERE id = %d",
+                    $conversation_id
+                ));
+            } else {
+                // Get the most recent conversation admin is viewing
+                $conversation = $wpdb->get_row(
+                    "SELECT * FROM $table_conversations ORDER BY updated_at DESC LIMIT 1"
+                );
+            }
+        } else {
+            // Regular user - get their own conversation
+            $conversation = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table_conversations WHERE user_id = %d ORDER BY id DESC LIMIT 1",
+                $user_id
+            ));
+        }
+        
+        if (!$conversation) {
+            return new WP_Error('not_found', 'Conversation not found', array('status' => 404));
+        }
+        
+        // Determine sender type
+        $sender_type = $is_admin ? 'admin' : 'user';
+        
+        // Trigger Pusher event on conversation channel
+        $this->trigger_pusher_event('conversation-' . $conversation->id, 'typing', array(
+            'sender' => $sender_type,
+            'isTyping' => $is_typing,
+            'isRecording' => $is_recording
+        ));
+        
+        // If user is typing, also notify admin channel
+        if (!$is_admin) {
+            $user_name = $user ? $user->display_name : 'کاربر';
+            $this->trigger_pusher_event('admin-support', 'user-typing', array(
+                'conversationId' => (int) $conversation->id,
+                'userId' => $user_id,
+                'userName' => $user_name,
+                'isTyping' => $is_typing,
+                'isRecording' => $is_recording
+            ));
+        }
+        
+        return rest_ensure_response(array('success' => true));
+    }
+    
+    /**
+     * Admin typing indicator
+     */
+    public function admin_typing($request) {
+        $conversation_id = (int) $request->get_param('id');
+        $params = $request->get_json_params();
+        $is_typing = isset($params['isTyping']) ? (bool) $params['isTyping'] : true;
+        $is_recording = isset($params['isRecording']) ? (bool) $params['isRecording'] : false;
+        
+        // Trigger Pusher event to conversation channel
+        $this->trigger_pusher_event('conversation-' . $conversation_id, 'typing', array(
+            'sender' => 'admin',
+            'isTyping' => $is_typing,
+            'isRecording' => $is_recording
+        ));
         
         return rest_ensure_response(array('success' => true));
     }

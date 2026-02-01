@@ -115,6 +115,18 @@ export const adminAPI = {
     return response.json();
   },
 
+  // Send typing indicator
+  async sendTyping(conversationId, isTyping) {
+    const response = await fetch(`${API_URL}/admin/conversations/${conversationId}/typing`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ isTyping })
+    });
+    
+    if (!response.ok) throw new Error('Failed to send typing');
+    return response.json();
+  },
+
   // Upload
   async uploadMedia(file) {
     const token = getToken();
@@ -276,6 +288,69 @@ export const adminAPI = {
     });
     
     if (!response.ok) throw new Error('Failed to toggle pin');
+    return response.json();
+  },
+
+  // ==========================================
+  // Subscription Methods
+  // ==========================================
+
+  // Get all subscriptions (with filter and pagination)
+  async getSubscriptions(status = 'all', page = 1, perPage = 20) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    if (status && status !== 'all') {
+      params.append('status', status);
+    }
+    
+    const response = await fetch(`${API_URL}/admin/subscriptions?${params}`, {
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch subscriptions');
+    return response.json();
+  },
+
+  // Get single subscription detail
+  async getSubscription(id) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}`, {
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch subscription');
+    return response.json();
+  },
+
+  // Get subscription stats
+  async getSubscriptionStats() {
+    const response = await fetch(`${API_URL}/admin/subscriptions/stats`, {
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch subscription stats');
+    return response.json();
+  },
+
+  // Approve subscription
+  async approveSubscription(id, data) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/approve`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify(data)
+    });
+    
+    if (!response.ok) throw new Error('Failed to approve subscription');
+    return response.json();
+  },
+
+  // Reject subscription
+  async rejectSubscription(id, data) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/reject`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify(data)
+    });
+    
+    if (!response.ok) throw new Error('Failed to reject subscription');
     return response.json();
   }
 };

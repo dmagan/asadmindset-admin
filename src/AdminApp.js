@@ -6,23 +6,39 @@ import Conversations from './components/Conversations';
 import ChatView from './components/ChatView';
 import Settings from './components/Settings';
 import ChannelManager from './components/ChannelManager';
+import SubscriptionManager from './components/SubscriptionManager';
 import Login from './components/Login';
 import { usePusher } from './services/usePusher';
+import { adminAPI } from './services/adminAPI';
 
 const AdminApp = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('admin_token'));
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingSubscriptions, setPendingSubscriptions] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const { subscribe, isConnected } = usePusher();
 
-  // Subscribe to admin channel for new messages
+  // Fetch pending subscriptions count
+  const fetchPendingSubscriptions = async () => {
+    try {
+      const stats = await adminAPI.getSubscriptionStats();
+      setPendingSubscriptions(stats.pending || 0);
+    } catch (error) {
+      console.error('Error fetching subscription stats:', error);
+    }
+  };
+
+  // Subscribe to admin channel for new messages and subscriptions
   useEffect(() => {
     if (!isLoggedIn || !isConnected) return;
 
-    const unsubscribe = subscribe('admin-support', 'new-message', (data) => {
+    // Fetch initial pending subscriptions
+    fetchPendingSubscriptions();
+
+    const unsubscribeMessages = subscribe('admin-support', 'new-message', (data) => {
       console.log('New message received:', data);
       
       if (data.conversationId !== selectedConversationId) {
@@ -32,7 +48,17 @@ const AdminApp = () => {
       playNotificationSound();
     });
 
-    return unsubscribe;
+    // Subscribe to new subscription requests
+    const unsubscribeSubscriptions = subscribe('admin-support', 'new-subscription', (data) => {
+      console.log('New subscription request:', data);
+      setPendingSubscriptions(prev => prev + 1);
+      playNotificationSound();
+    });
+
+    return () => {
+      unsubscribeMessages();
+      unsubscribeSubscriptions();
+    };
   }, [isLoggedIn, isConnected, selectedConversationId]);
 
   const playNotificationSound = () => {
@@ -96,6 +122,8 @@ const AdminApp = () => {
             onBack={handleBackToConversations}
           />
         );
+      case 'subscriptions':
+        return <SubscriptionManager onRefresh={fetchPendingSubscriptions} />;
       case 'channel':
         return <ChannelManager />;
       case 'settings':
@@ -123,6 +151,7 @@ const AdminApp = () => {
         onNavigate={handleNavigate}
         onLogout={handleLogout}
         unreadCount={unreadCount}
+        pendingSubscriptions={pendingSubscriptions}
         isConnected={isConnected}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

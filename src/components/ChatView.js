@@ -33,6 +33,11 @@ const ChatView = ({ conversationId, onBack }) => {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   
+  // Typing indicator state
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
+  const lastTypingSentRef = useRef(0);
+  
   // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -120,6 +125,23 @@ const ChatView = ({ conversationId, onBack }) => {
       channel.bind('message-edited', handleMessageEdited);
       channel.bind('message-deleted', handleMessageDeleted);
       channel.bind('messages-read', handleMessagesRead);
+      
+      // User typing indicator
+      channel.bind('typing', (data) => {
+        if (data.sender === 'user') {
+          setIsUserTyping(data.isTyping);
+          
+          // Auto-hide after 3 seconds if no update
+          if (data.isTyping) {
+            if (typingTimeoutRef.current) {
+              clearTimeout(typingTimeoutRef.current);
+            }
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsUserTyping(false);
+            }, 3000);
+          }
+        }
+      });
     }
 
     return () => {
@@ -189,9 +211,39 @@ const ChatView = ({ conversationId, onBack }) => {
     }
   };
 
+  // Send typing indicator to server
+  const sendTypingIndicator = async (isTyping) => {
+    // Throttle: don't send more than once per second
+    const now = Date.now();
+    if (isTyping && now - lastTypingSentRef.current < 1000) return;
+    lastTypingSentRef.current = now;
+    
+    try {
+      await adminAPI.sendTyping(conversationId, isTyping);
+    } catch (error) {
+      // Silently fail - typing indicator is not critical
+    }
+  };
+
+  // Handle input change with typing indicator
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setNewMessage(value);
+    
+    // Send typing indicator
+    if (value.trim()) {
+      sendTypingIndicator(true);
+    } else {
+      sendTypingIndicator(false);
+    }
+  };
+
   // Send text message
   const handleSend = async () => {
     if (!newMessage.trim() || sending) return;
+
+    // Stop typing indicator
+    sendTypingIndicator(false);
 
     const tempId = Date.now();
     const messageText = newMessage;
@@ -818,6 +870,18 @@ const ChatView = ({ conversationId, onBack }) => {
         </div>
       )}
 
+      {/* Typing Indicator */}
+      {isUserTyping && (
+        <div className="typing-indicator-container">
+          <div className="typing-indicator">
+            <span className="typing-dot"></span>
+            <span className="typing-dot"></span>
+            <span className="typing-dot"></span>
+          </div>
+          <span className="typing-text">کاربر در حال نوشتن...</span>
+        </div>
+      )}
+
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
         <button className="scroll-to-bottom-btn" onClick={scrollToBottom}>
@@ -921,8 +985,9 @@ const ChatView = ({ conversationId, onBack }) => {
               type="text"
               placeholder="پیام خود را بنویسید..."
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              onBlur={() => sendTypingIndicator(false)}
             />
             <button 
               className="send-btn"

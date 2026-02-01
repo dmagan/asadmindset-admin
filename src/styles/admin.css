@@ -2267,3 +2267,75 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Typing Indicator */
+.typing-indicator-container {
+  position: absolute;
+  bottom: 90px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 100;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+
+.typing-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
