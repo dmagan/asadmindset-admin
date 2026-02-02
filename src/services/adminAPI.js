@@ -352,5 +352,18 @@ export const adminAPI = {
     
     if (!response.ok) throw new Error('Failed to reject subscription');
     return response.json();
+  },
+
+  // Send message to user's support conversation
+  async sendMessageToUser(userId, message) {
+    // First get or create user's conversation
+    const response = await fetch(`${API_URL}/admin/conversations/user/${userId}/message`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ content: message, type: 'text' })
+    });
+    
+    if (!response.ok) throw new Error('Failed to send message to user');
+    return response.json();
   }
 };

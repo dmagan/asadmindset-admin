@@ -1501,3 +1501,4 @@ AsadMindset_Support::get_instance();
 
 // Include Alpha Channel module
 require_once plugin_dir_path(__FILE__) . 'alpha-channel.php';
+require_once plugin_dir_path(__FILE__) . 'subscription.php';

@@ -90,11 +90,28 @@ const SubscriptionManager = () => {
 
   const handleReject = async () => {
     if (!selectedSubscription) return;
+    if (!adminNote.trim()) {
+      alert('لطفا دلیل رد درخواست را بنویسید');
+      return;
+    }
+    
     setProcessing(true);
     try {
+      // 1. Reject the subscription
       await adminAPI.rejectSubscription(selectedSubscription.id, {
-        admin_note: adminNote || 'درخواست رد شد'
+        admin_note: adminNote
       });
+      
+      // 2. Send rejection message to user's support chat
+      const rejectMessage = `❌ درخواست اشتراک شما رد شد\n\n📝 دلیل: ${adminNote}\n\nدر صورت نیاز به راهنمایی بیشتر، همینجا پیام دهید.`;
+      
+      try {
+        await adminAPI.sendMessageToUser(selectedSubscription.userId, rejectMessage);
+      } catch (msgError) {
+        console.error('Error sending rejection message:', msgError);
+        // Continue even if message fails
+      }
+      
       setShowRejectModal(false);
       setSelectedSubscription(null);
       setAdminNote('');
