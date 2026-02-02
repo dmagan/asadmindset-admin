@@ -365,5 +365,50 @@ export const adminAPI = {
     
     if (!response.ok) throw new Error('Failed to send message to user');
     return response.json();
+  },
+
+  // Update subscription status (edit)
+  async updateSubscriptionStatus(id, data) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/update-status`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify(data)
+    });
+    
+    if (!response.ok) throw new Error('Failed to update subscription status');
+    return response.json();
+  },
+
+  // Soft delete - move to trash
+  async trashSubscription(id) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/trash`, {
+      method: 'PUT',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to trash subscription');
+    return response.json();
+  },
+
+  // Restore from trash
+  async restoreSubscription(id) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/restore`, {
+      method: 'PUT',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to restore subscription');
+    return response.json();
+  },
+
+  // Permanent delete (only from trash)
+  async permanentDeleteSubscription(id) {
+    const response = await fetch(`${API_URL}/admin/subscriptions/${id}/permanent-delete`, {
+      method: 'DELETE',
+      headers: headers()
+    });
+    
+    if (!response.ok) throw new Error('Failed to permanently delete subscription');
+    return response.json();
   }
 };

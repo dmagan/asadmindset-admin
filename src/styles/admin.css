@@ -206,6 +206,305 @@ body {
   background: rgba(239, 68, 68, 0.1);
 }
 
+
+/* === ADD THIS TO admin.css after .nav-item.logout:hover === */
+
+.nav-item.trash-nav {
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.nav-item.trash-nav:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.nav-item.trash-nav.active {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* === Table action buttons (edit/delete) === */
+
+.action-btn.edit {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.action-btn.edit:hover {
+  background: rgba(99, 102, 241, 0.25);
+  transform: translateY(-1px);
+}
+
+.action-btn.delete {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.25);
+  transform: translateY(-1px);
+}
+
+/* === Detail Modal Footer === */
+
+.detail-modal-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-modal-footer .footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.detail-modal-footer .footer-left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Edit button in modal */
+.edit-btn-modal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.1);
+  color: #fbbf24;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.edit-btn-modal:hover {
+  background: rgba(234, 179, 8, 0.2);
+  border-color: rgba(234, 179, 8, 0.6);
+}
+
+/* Delete button in modal */
+.delete-btn-modal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.delete-btn-modal:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* Close/Cancel button in modal */
+.close-modal-btn {
+  padding: 10px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.close-modal-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* === Edit Modal - Status Options (dark theme) === */
+
+.current-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.status-option:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.status-option.pending.active {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.status-option.approved.active {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.status-option.rejected.active {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* === Confirm Modal (dark theme) === */
+
+.confirm-modal {
+  background: #1e2130;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 32px;
+  width: 400px;
+  max-width: 90vw;
+  text-align: center;
+  direction: rtl;
+}
+
+.confirm-modal.danger {
+  border: 2px solid rgba(239, 68, 68, 0.3);
+}
+
+.confirm-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: #f59e0b;
+}
+
+.confirm-icon.restore {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.confirm-icon.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.confirm-modal h3 {
+  font-size: 18px;
+  color: white;
+  margin: 0 0 8px 0;
+}
+
+.confirm-modal p {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 4px 0;
+}
+
+.confirm-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.confirm-warning {
+  font-size: 13px;
+  color: #f87171;
+  font-weight: 500;
+  margin-top: 8px !important;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  justify-content: center;
+}
+
+/* Cancel button inside confirm modals */
+.confirm-actions .cancel-btn,
+.confirm-modal .cancel-btn {
+  padding: 10px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.confirm-actions .cancel-btn:hover,
+.confirm-modal .cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.delete-confirm-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.delete-confirm-btn:hover {
+  opacity: 0.9;
+}
+
+.delete-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ============================= */
 /* Login Page */
 /* ============================= */

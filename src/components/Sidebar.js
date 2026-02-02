@@ -8,7 +8,8 @@ import {
   WifiOff,
   X,
   Radio,
-  Crown
+  Crown,
+  Trash2
 } from 'lucide-react';
 
 const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, pendingSubscriptions, isConnected, isOpen, onClose }) => {
@@ -56,6 +57,13 @@ const Sidebar = ({ currentPage, onNavigate, onLogout, unreadCount, pendingSubscr
       </nav>
 
       <div className="sidebar-footer">
+        <button 
+          className={`nav-item trash-nav ${currentPage === 'trash' ? 'active' : ''}`}
+          onClick={() => onNavigate('trash')}
+        >
+          <Trash2 size={20} />
+          <span>سطل آشغال</span>
+        </button>
         <button className="nav-item logout" onClick={onLogout}>
           <LogOut size={20} />
           <span>خروج</span>

@@ -16,7 +16,9 @@ import {
   AlertCircle,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trash2,
+  Edit3
 } from 'lucide-react';
 import { adminAPI } from '../services/adminAPI';
 import './SubscriptionManager.css';
@@ -38,6 +40,12 @@ const SubscriptionManager = () => {
   const [durationDays, setDurationDays] = useState(30);
   const [adminNote, setAdminNote] = useState('');
   const [processing, setProcessing] = useState(false);
+  
+  // Edit & Trash states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editStatus, setEditStatus] = useState('');
+  const [editCreatedAt, setEditCreatedAt] = useState('');
 
   const loadSubscriptions = useCallback(async () => {
     try {
@@ -143,6 +151,65 @@ const SubscriptionManager = () => {
     setShowDetailModal(true);
   };
 
+  const openEditModal = (subscription) => {
+    setSelectedSubscription(subscription);
+    setEditStatus(subscription.status);
+    setDurationDays(30);
+    setAdminNote('');
+    // Convert createdAt to local datetime-local format
+    const created = subscription.createdAt ? subscription.createdAt.replace(' ', 'T').slice(0, 16) : '';
+    setEditCreatedAt(created);
+    setShowEditModal(true);
+  };
+
+  const openDeleteConfirm = (subscription) => {
+    setSelectedSubscription(subscription);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleEditStatus = async () => {
+    if (!selectedSubscription) return;
+    setProcessing(true);
+    try {
+      const data = {
+        status: editStatus,
+        duration_days: editStatus === 'approved' ? durationDays : undefined,
+        admin_note: adminNote
+      };
+      // Send created_at if changed
+      if (editCreatedAt) {
+        data.created_at = editCreatedAt.replace('T', ' ') + ':00';
+      }
+      await adminAPI.updateSubscriptionStatus(selectedSubscription.id, data);
+      setShowEditModal(false);
+      setSelectedSubscription(null);
+      loadSubscriptions();
+      loadStats();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('خطا در بروزرسانی وضعیت');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleSoftDelete = async () => {
+    if (!selectedSubscription) return;
+    setProcessing(true);
+    try {
+      await adminAPI.trashSubscription(selectedSubscription.id);
+      setShowDeleteConfirm(false);
+      setSelectedSubscription(null);
+      loadSubscriptions();
+      loadStats();
+    } catch (error) {
+      console.error('Error trashing subscription:', error);
+      alert('خطا در انتقال به سطل آشغال');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -170,6 +237,8 @@ const SubscriptionManager = () => {
   };
 
   const filteredSubscriptions = subscriptions.filter(sub => {
+    // Always exclude trashed items from main list
+    if (sub.status === 'trashed') return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return sub.userName?.toLowerCase().includes(query) || sub.userEmail?.toLowerCase().includes(query);
@@ -280,6 +349,8 @@ const SubscriptionManager = () => {
                           <button className="action-btn reject" onClick={() => openRejectModal(sub)} title="رد"><XCircle size={18} /></button>
                         </>
                       )}
+                      <button className="action-btn edit" onClick={() => openEditModal(sub)} title="ویرایش وضعیت"><Edit3 size={18} /></button>
+                      <button className="action-btn delete" onClick={() => openDeleteConfirm(sub)} title="انتقال به سطل آشغال"><Trash2 size={18} /></button>
                     </div>
                   </div>
                 </div>
@@ -331,15 +402,20 @@ const SubscriptionManager = () => {
                 </div>
               )}
             </div>
-            <div className="modal-footer">
-              {selectedSubscription.status === 'pending' ? (
-                <>
-                  <button className="reject-btn" onClick={() => { setShowDetailModal(false); openRejectModal(selectedSubscription); }}><XCircle size={20} /><span>رد کردن</span></button>
-                  <button className="approve-btn" onClick={() => { setShowDetailModal(false); openApproveModal(selectedSubscription); }}><CheckCircle size={20} /><span>تایید کردن</span></button>
-                </>
-              ) : (
+            <div className="modal-footer detail-modal-footer">
+              <div className="footer-right">
+                {selectedSubscription.status === 'pending' && (
+                  <>
+                    <button className="approve-btn" onClick={() => { setShowDetailModal(false); openApproveModal(selectedSubscription); }}><CheckCircle size={20} /><span>تایید کردن</span></button>
+                    <button className="reject-btn" onClick={() => { setShowDetailModal(false); openRejectModal(selectedSubscription); }}><XCircle size={20} /><span>رد کردن</span></button>
+                  </>
+                )}
+                <button className="edit-btn-modal" onClick={() => { setShowDetailModal(false); openEditModal(selectedSubscription); }}><Edit3 size={18} /><span>ویرایش</span></button>
+              </div>
+              <div className="footer-left">
+                <button className="delete-btn-modal" onClick={() => { setShowDetailModal(false); openDeleteConfirm(selectedSubscription); }}><Trash2 size={18} /><span>حذف</span></button>
                 <button className="close-modal-btn" onClick={() => setShowDetailModal(false)}>بستن</button>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -411,6 +487,96 @@ const SubscriptionManager = () => {
               <button className="cancel-btn" onClick={() => setShowRejectModal(false)}>انصراف</button>
               <button className="reject-btn" onClick={handleReject} disabled={processing}>
                 {processing ? <Loader2 size={20} className="spinning" /> : <><XCircle size={20} /><span>رد درخواست</span></>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Status Modal */}
+      {showEditModal && selectedSubscription && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>ویرایش وضعیت</h2>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}><X size={24} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="user-summary">
+                <div className="user-avatar large">{selectedSubscription.userName?.charAt(0) || 'U'}</div>
+                <div className="user-info-col">
+                  <span className="name">{selectedSubscription.userName}</span>
+                  <span className="email">{selectedSubscription.userEmail}</span>
+                </div>
+              </div>
+              <div className="current-status-row">
+                <span>وضعیت فعلی:</span>
+                {getStatusBadge(selectedSubscription.status)}
+              </div>
+              <div className="form-group">
+                <label>وضعیت جدید</label>
+                <div className="status-options">
+                  {['pending', 'approved', 'rejected'].map(s => (
+                    <button 
+                      key={s} 
+                      className={`status-option ${s} ${editStatus === s ? 'active' : ''}`}
+                      onClick={() => setEditStatus(s)}
+                    >
+                      {s === 'pending' && <><Clock size={16} /> در انتظار</>}
+                      {s === 'approved' && <><CheckCircle size={16} /> تایید شده</>}
+                      {s === 'rejected' && <><XCircle size={16} /> رد شده</>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {editStatus === 'approved' && (
+                <div className="form-group">
+                  <label>مدت اشتراک (روز)</label>
+                  <div className="duration-options">
+                    {[30, 60, 90, 180, 365].map((days) => (
+                      <button key={days} className={`duration-option ${durationDays === days ? 'active' : ''}`} onClick={() => setDurationDays(days)}>{days} روز</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="form-group">
+                <label>تاریخ و ساعت خرید</label>
+                <input 
+                  type="datetime-local" 
+                  value={editCreatedAt} 
+                  onChange={(e) => setEditCreatedAt(e.target.value)} 
+                  className="datetime-input"
+                />
+              </div>
+              <div className="form-group">
+                <label>یادداشت ادمین (اختیاری)</label>
+                <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="یادداشت..." rows={3} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="cancel-btn" onClick={() => setShowEditModal(false)}>انصراف</button>
+              <button className="approve-btn" onClick={handleEditStatus} disabled={processing}>
+                {processing ? <Loader2 size={20} className="spinning" /> : <><Edit3 size={20} /><span>ذخیره تغییرات</span></>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Soft Delete Confirm Modal */}
+      {showDeleteConfirm && selectedSubscription && (
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon">
+              <Trash2 size={32} />
+            </div>
+            <h3>انتقال به سطل آشغال</h3>
+            <p>آیا از انتقال درخواست <strong>{selectedSubscription.userName}</strong> به سطل آشغال مطمئنید؟</p>
+            <p className="confirm-hint">می‌توانید بعداً از سطل آشغال بازیابی کنید.</p>
+            <div className="confirm-actions">
+              <button className="cancel-btn" onClick={() => setShowDeleteConfirm(false)}>انصراف</button>
+              <button className="delete-confirm-btn" onClick={handleSoftDelete} disabled={processing}>
+                {processing ? <Loader2 size={20} className="spinning" /> : <><Trash2 size={18} /><span>انتقال به سطل آشغال</span></>}
               </button>
             </div>
           </div>

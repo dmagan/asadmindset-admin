@@ -55,6 +55,7 @@ class AsadMindset_Subscription {
             plan_type varchar(20) DEFAULT 'monthly',
             amount decimal(10,2) DEFAULT 0,
             payment_proof varchar(500) DEFAULT NULL,
+            tx_hash varchar(255) DEFAULT NULL,
             status varchar(20) DEFAULT 'pending',
             admin_note text DEFAULT NULL,
             started_at datetime DEFAULT NULL,
@@ -131,14 +132,43 @@ class AsadMindset_Subscription {
             'callback' => array($this, 'admin_reject_subscription'),
             'permission_callback' => array($this, 'check_admin_auth')
         ));
-        
+
         // Get subscription stats
         register_rest_route($namespace, '/admin/subscriptions/stats', array(
             'methods' => 'GET',
             'callback' => array($this, 'admin_get_stats'),
             'permission_callback' => array($this, 'check_admin_auth')
         ));
+        
+        // Update status (edit)
+        register_rest_route($namespace, '/admin/subscriptions/(?P<id>\d+)/update-status', array(
+            'methods' => 'PUT',
+            'callback' => array($this, 'admin_update_status'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
+
+        // Trash (soft delete)
+        register_rest_route($namespace, '/admin/subscriptions/(?P<id>\d+)/trash', array(
+            'methods' => 'PUT',
+            'callback' => array($this, 'admin_trash_subscription'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
+
+        // Restore from trash
+        register_rest_route($namespace, '/admin/subscriptions/(?P<id>\d+)/restore', array(
+            'methods' => 'PUT',
+            'callback' => array($this, 'admin_restore_subscription'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
+
+        // Permanent delete
+        register_rest_route($namespace, '/admin/subscriptions/(?P<id>\d+)/permanent-delete', array(
+            'methods' => 'DELETE',
+            'callback' => array($this, 'admin_permanent_delete'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
     }
+    
     
     /**
      * Check user authentication
@@ -182,36 +212,36 @@ class AsadMindset_Subscription {
         return null;
     }
     
-/**
- * Validate JWT token and return user ID
- */
-private function validate_jwt_token($token) {
-    $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
-    if (!$secret_key) {
-        return false;
+    /**
+     * Validate JWT token and return user ID
+     */
+    private function validate_jwt_token($token) {
+        $secret_key = defined('JWT_AUTH_SECRET_KEY') ? JWT_AUTH_SECRET_KEY : false;
+        if (!$secret_key) {
+            return false;
+        }
+        
+        try {
+            $parts = explode('.', $token);
+            if (count($parts) !== 3) {
+                return false;
+            }
+            
+            $payload = json_decode(base64_decode($parts[1]), true);
+            if (!$payload || !isset($payload['data']['user']['id'])) {
+                return false;
+            }
+            
+            // Check expiration
+            if (isset($payload['exp']) && $payload['exp'] < time()) {
+                return false;
+            }
+            
+            return $payload['data']['user']['id'];
+        } catch (Exception $e) {
+            return false;
+        }
     }
-    
-    try {
-        $parts = explode('.', $token);
-        if (count($parts) !== 3) {
-            return false;
-        }
-        
-        $payload = json_decode(base64_decode($parts[1]), true);
-        if (!$payload || !isset($payload['data']['user']['id'])) {
-            return false;
-        }
-        
-        // Check expiration
-        if (isset($payload['exp']) && $payload['exp'] < time()) {
-            return false;
-        }
-        
-        return $payload['data']['user']['id'];
-    } catch (Exception $e) {
-        return false;
-    }
-}
     
     /**
      * Get user ID from request
@@ -252,31 +282,31 @@ private function validate_jwt_token($token) {
         
         $tx_hash = isset($params['tx_hash']) ? sanitize_text_field($params['tx_hash']) : '';
 
-if (empty($payment_proof) && empty($tx_hash)) {
-    return new WP_Error('no_proof', 'لطفا هش تراکنش یا تصویر رسید پرداخت را وارد کنید', array('status' => 400));
-}
+        if (empty($payment_proof) && empty($tx_hash)) {
+            return new WP_Error('no_proof', 'لطفا هش تراکنش یا تصویر رسید پرداخت را وارد کنید', array('status' => 400));
+        }
 
-// بررسی تکراری نبودن هش تراکنش
-if (!empty($tx_hash)) {
-    $existing = $wpdb->get_row($wpdb->prepare(
-        "SELECT id FROM $table_subscriptions WHERE tx_hash = %s",
-        $tx_hash
-    ));
-    if ($existing) {
-        return new WP_Error('duplicate_tx', 'این هش تراکنش قبلاً ثبت شده است', array('status' => 400));
-    }
-}
+        // بررسی تکراری نبودن هش تراکنش
+        if (!empty($tx_hash)) {
+            $existing = $wpdb->get_row($wpdb->prepare(
+                "SELECT id FROM $table_subscriptions WHERE tx_hash = %s",
+                $tx_hash
+            ));
+            if ($existing) {
+                return new WP_Error('duplicate_tx', 'این هش تراکنش قبلاً ثبت شده است', array('status' => 400));
+            }
+        }
         
         // Insert subscription request
         $result = $wpdb->insert($table_subscriptions, array(
-    'user_id' => $user_id,
-    'plan_type' => $plan_type,
-    'amount' => $amount,
-    'payment_proof' => $payment_proof,
-    'tx_hash' => $tx_hash,
-    'status' => 'pending',
-    'created_at' => current_time('mysql')
-));
+            'user_id' => $user_id,
+            'plan_type' => $plan_type,
+            'amount' => $amount,
+            'payment_proof' => $payment_proof,
+            'tx_hash' => $tx_hash,
+            'status' => 'pending',
+            'created_at' => current_time('mysql')
+        ));
         
         if ($result === false) {
             return new WP_Error('db_error', 'خطا در ثبت درخواست', array('status' => 500));
@@ -360,7 +390,7 @@ if (!empty($tx_hash)) {
         }
         
         if ($rejected && !$active && !$pending) {
-    $response['lastRejected'] = array(
+            $response['lastRejected'] = array(
                 'id' => (int) $rejected->id,
                 'adminNote' => $rejected->admin_note,
                 'rejectedAt' => $rejected->updated_at
@@ -407,6 +437,7 @@ if (!empty($tx_hash)) {
     
     /**
      * Get all subscription requests (admin)
+     * ✅ UPDATED: Now supports 'trashed' filter and excludes trashed from default view
      */
     public function admin_get_subscriptions($request) {
         global $wpdb;
@@ -419,8 +450,15 @@ if (!empty($tx_hash)) {
         
         // Build query
         $where = "1=1";
-        if ($status && in_array($status, array('pending', 'approved', 'rejected'))) {
+        
+        // ✅ FIX: Handle 'trashed' status and exclude trashed from normal views
+        if ($status === 'trashed') {
+            $where .= " AND s.status = 'trashed'";
+        } elseif ($status && in_array($status, array('pending', 'approved', 'rejected'))) {
             $where .= $wpdb->prepare(" AND s.status = %s", $status);
+        } else {
+            // Default (all): exclude trashed items
+            $where .= " AND s.status != 'trashed'";
         }
         
         // Get total count
@@ -436,7 +474,9 @@ if (!empty($tx_hash)) {
                 CASE s.status 
                     WHEN 'pending' THEN 1 
                     WHEN 'approved' THEN 2 
-                    ELSE 3 
+                    WHEN 'rejected' THEN 3
+                    WHEN 'trashed' THEN 4
+                    ELSE 5 
                 END,
                 s.created_at DESC
              LIMIT %d OFFSET %d",
@@ -652,7 +692,8 @@ if (!empty($tx_hash)) {
         
         $table_subscriptions = $wpdb->prefix . 'subscriptions';
         
-        $total = $wpdb->get_var("SELECT COUNT(*) FROM $table_subscriptions");
+        // ✅ Exclude trashed from total count
+        $total = $wpdb->get_var("SELECT COUNT(*) FROM $table_subscriptions WHERE status != 'trashed'");
         $pending = $wpdb->get_var("SELECT COUNT(*) FROM $table_subscriptions WHERE status = 'pending'");
         $approved = $wpdb->get_var("SELECT COUNT(*) FROM $table_subscriptions WHERE status = 'approved'");
         $rejected = $wpdb->get_var("SELECT COUNT(*) FROM $table_subscriptions WHERE status = 'rejected'");
@@ -661,7 +702,7 @@ if (!empty($tx_hash)) {
         // Today's stats
         $today = date('Y-m-d');
         $today_requests = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table_subscriptions WHERE DATE(created_at) = %s",
+            "SELECT COUNT(*) FROM $table_subscriptions WHERE DATE(created_at) = %s AND status != 'trashed'",
             $today
         ));
         
@@ -681,6 +722,245 @@ if (!empty($tx_hash)) {
             'active' => (int) $active,
             'todayRequests' => (int) $today_requests,
             'monthRevenue' => floatval($month_revenue)
+        ));
+    }
+    
+    // ==========================================
+    // ✅ NEW: Edit, Trash, Restore, Permanent Delete
+    // ==========================================
+    
+    /**
+     * Update subscription status (ویرایش وضعیت)
+     * Allows changing between: pending, approved, rejected
+     */
+    public function admin_update_status($request) {
+        global $wpdb;
+        
+        $table_subscriptions = $wpdb->prefix . 'subscriptions';
+        $subscription_id = (int) $request->get_param('id');
+        $admin_id = $this->get_user_id_from_request($request);
+        
+        $params = $request->get_json_params();
+        $new_status = isset($params['status']) ? sanitize_text_field($params['status']) : '';
+        $admin_note = isset($params['admin_note']) ? sanitize_textarea_field($params['admin_note']) : '';
+        $duration_days = isset($params['duration_days']) ? intval($params['duration_days']) : 30;
+        
+        // Validate status
+        $allowed_statuses = array('pending', 'approved', 'rejected');
+        if (!in_array($new_status, $allowed_statuses)) {
+            return new WP_Error('invalid_status', 'وضعیت نامعتبر', array('status' => 400));
+        }
+        
+        // Get current subscription
+        $subscription = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_subscriptions WHERE id = %d",
+            $subscription_id
+        ));
+        
+        if (!$subscription) {
+            return new WP_Error('not_found', 'اشتراک یافت نشد', array('status' => 404));
+        }
+        
+        // Can't edit trashed items
+        if ($subscription->status === 'trashed') {
+            return new WP_Error('is_trashed', 'ابتدا باید از سطل آشغال بازیابی کنید', array('status' => 400));
+        }
+        
+        // Build update data
+        $update_data = array(
+            'status'      => $new_status,
+            'admin_note'  => $admin_note,
+            'approved_by' => $admin_id,
+            'updated_at'  => current_time('mysql'),
+        );
+        
+        // If changing to approved, set dates
+        if ($new_status === 'approved') {
+            $update_data['approved_at'] = current_time('mysql');
+            $update_data['started_at']  = current_time('mysql');
+            $update_data['expires_at']  = date('Y-m-d H:i:s', strtotime("+{$duration_days} days"));
+        }
+        
+        // If changing FROM approved to something else, clear dates
+        if ($subscription->status === 'approved' && $new_status !== 'approved') {
+            $update_data['started_at']  = null;
+            $update_data['expires_at']  = null;
+        }
+        
+        $result = $wpdb->update(
+            $table_subscriptions,
+            $update_data,
+            array('id' => $subscription_id)
+        );
+        
+        if ($result === false) {
+            return new WP_Error('db_error', 'خطا در بروزرسانی', array('status' => 500));
+        }
+        
+        // Notify user
+        if ($new_status === 'approved') {
+            $this->trigger_pusher_event('user-' . $subscription->user_id, 'subscription-approved', array(
+                'subscriptionId' => $subscription_id,
+                'expiresAt' => $update_data['expires_at'],
+                'message' => 'اشتراک شما تایید شد!'
+            ));
+        }
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'message' => 'وضعیت با موفقیت تغییر کرد',
+            'status'  => $new_status
+        ));
+    }
+    
+    /**
+     * Soft delete - move to trash (انتقال به سطل آشغال)
+     */
+    public function admin_trash_subscription($request) {
+        global $wpdb;
+        
+        $table_subscriptions = $wpdb->prefix . 'subscriptions';
+        $subscription_id = (int) $request->get_param('id');
+        
+        $subscription = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_subscriptions WHERE id = %d",
+            $subscription_id
+        ));
+        
+        if (!$subscription) {
+            return new WP_Error('not_found', 'اشتراک یافت نشد', array('status' => 404));
+        }
+        
+        if ($subscription->status === 'trashed') {
+            return new WP_Error('already_trashed', 'این مورد قبلاً در سطل آشغال است', array('status' => 400));
+        }
+        
+        // Save previous status in admin_note for restore
+        $previous_info = 'previous_status:' . $subscription->status;
+        if ($subscription->admin_note) {
+            $previous_info .= '|previous_note:' . $subscription->admin_note;
+        }
+        
+        $result = $wpdb->update(
+            $table_subscriptions,
+            array(
+                'status'     => 'trashed',
+                'admin_note' => $previous_info,
+                'updated_at' => current_time('mysql'),
+            ),
+            array('id' => $subscription_id)
+        );
+        
+        if ($result === false) {
+            return new WP_Error('db_error', 'خطا در انتقال به سطل آشغال', array('status' => 500));
+        }
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'message' => 'به سطل آشغال منتقل شد'
+        ));
+    }
+    
+    /**
+     * Restore from trash (بازیابی از سطل آشغال)
+     */
+    public function admin_restore_subscription($request) {
+        global $wpdb;
+        
+        $table_subscriptions = $wpdb->prefix . 'subscriptions';
+        $subscription_id = (int) $request->get_param('id');
+        
+        $subscription = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_subscriptions WHERE id = %d",
+            $subscription_id
+        ));
+        
+        if (!$subscription) {
+            return new WP_Error('not_found', 'اشتراک یافت نشد', array('status' => 404));
+        }
+        
+        if ($subscription->status !== 'trashed') {
+            return new WP_Error('not_trashed', 'این مورد در سطل آشغال نیست', array('status' => 400));
+        }
+        
+        // Extract previous status from admin_note
+        $previous_status = 'pending';
+        $previous_note = '';
+        
+        if ($subscription->admin_note && strpos($subscription->admin_note, 'previous_status:') === 0) {
+            $parts = explode('|', $subscription->admin_note);
+            foreach ($parts as $part) {
+                if (strpos($part, 'previous_status:') === 0) {
+                    $previous_status = str_replace('previous_status:', '', $part);
+                }
+                if (strpos($part, 'previous_note:') === 0) {
+                    $previous_note = str_replace('previous_note:', '', $part);
+                }
+            }
+        }
+        
+        // Validate previous status
+        if (!in_array($previous_status, array('pending', 'approved', 'rejected'))) {
+            $previous_status = 'pending';
+        }
+        
+        $result = $wpdb->update(
+            $table_subscriptions,
+            array(
+                'status'     => $previous_status,
+                'admin_note' => $previous_note,
+                'updated_at' => current_time('mysql'),
+            ),
+            array('id' => $subscription_id)
+        );
+        
+        if ($result === false) {
+            return new WP_Error('db_error', 'خطا در بازیابی', array('status' => 500));
+        }
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'message' => 'با موفقیت بازیابی شد',
+            'restored_status' => $previous_status
+        ));
+    }
+    
+    /**
+     * Permanent delete (حذف دائمی - فقط از سطل آشغال)
+     */
+    public function admin_permanent_delete($request) {
+        global $wpdb;
+        
+        $table_subscriptions = $wpdb->prefix . 'subscriptions';
+        $subscription_id = (int) $request->get_param('id');
+        
+        $subscription = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_subscriptions WHERE id = %d",
+            $subscription_id
+        ));
+        
+        if (!$subscription) {
+            return new WP_Error('not_found', 'اشتراک یافت نشد', array('status' => 404));
+        }
+        
+        // Only allow permanent delete from trash
+        if ($subscription->status !== 'trashed') {
+            return new WP_Error('not_trashed', 'فقط موارد در سطل آشغال قابل حذف دائمی هستند', array('status' => 400));
+        }
+        
+        $result = $wpdb->delete(
+            $table_subscriptions,
+            array('id' => $subscription_id),
+            array('%d')
+        );
+        
+        if ($result === false) {
+            return new WP_Error('db_error', 'خطا در حذف دائمی', array('status' => 500));
+        }
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'message' => 'به طور دائمی حذف شد'
         ));
     }
     

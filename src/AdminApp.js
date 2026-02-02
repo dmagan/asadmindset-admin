@@ -7,6 +7,7 @@ import ChatView from './components/ChatView';
 import Settings from './components/Settings';
 import ChannelManager from './components/ChannelManager';
 import SubscriptionManager from './components/SubscriptionManager';
+import TrashPage from './components/TrashPage';
 import Login from './components/Login';
 import { usePusher } from './services/usePusher';
 import { adminAPI } from './services/adminAPI';
@@ -124,6 +125,8 @@ const AdminApp = () => {
         );
       case 'subscriptions':
         return <SubscriptionManager onRefresh={fetchPendingSubscriptions} />;
+      case 'trash':
+        return <TrashPage />;
       case 'channel':
         return <ChannelManager />;
       case 'settings':
