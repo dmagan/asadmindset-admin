@@ -744,6 +744,7 @@ class AsadMindset_Subscription {
         $new_status = isset($params['status']) ? sanitize_text_field($params['status']) : '';
         $admin_note = isset($params['admin_note']) ? sanitize_textarea_field($params['admin_note']) : '';
         $duration_days = isset($params['duration_days']) ? intval($params['duration_days']) : 30;
+        $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) : '';
         
         // Validate status
         $allowed_statuses = array('pending', 'approved', 'rejected');
@@ -773,6 +774,11 @@ class AsadMindset_Subscription {
             'approved_by' => $admin_id,
             'updated_at'  => current_time('mysql'),
         );
+        
+        // If admin changed created_at (purchase date)
+        if (!empty($created_at)) {
+            $update_data['created_at'] = $created_at;
+        }
         
         // If changing to approved, set dates
         if ($new_status === 'approved') {
