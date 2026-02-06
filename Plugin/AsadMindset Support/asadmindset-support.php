@@ -256,74 +256,81 @@ class AsadMindset_Support {
             'permission_callback' => '__return_true'
         ));
         
-        // Get all conversations (admin)
+        // Get all conversations (admin/support agent)
         register_rest_route($namespace, '/admin/conversations', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_all_conversations'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Get conversation messages (admin)
+        // Get conversation messages (admin/support agent)
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_conversation_messages'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Mark messages as read (admin marks user messages as read)
+        // Mark messages as read (admin/support agent marks user messages as read)
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/read', array(
             'methods' => 'POST',
             'callback' => array($this, 'mark_messages_read_admin'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Send message (admin)
+        
+        // Mark conversation as unread (admin)
+        register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/unread', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'mark_conversation_unread'),
+            'permission_callback' => array($this, 'check_admin_auth_support')
+        ));
+        // Send message (admin/support agent)
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/message', array(
             'methods' => 'POST',
             'callback' => array($this, 'send_admin_message'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
         // Admin typing indicator
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/typing', array(
             'methods' => 'POST',
             'callback' => array($this, 'admin_typing'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Edit message (admin)
+        // Edit message (admin/support agent)
         register_rest_route($namespace, '/admin/messages/(?P<id>\d+)', array(
             'methods' => 'PUT',
             'callback' => array($this, 'edit_message'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Delete message (admin)
+        // Delete message (admin/support agent)
         register_rest_route($namespace, '/admin/messages/(?P<id>\d+)', array(
             'methods' => 'DELETE',
             'callback' => array($this, 'delete_message'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Admin upload media
+        // Admin upload media (support + channel agents need this)
         register_rest_route($namespace, '/admin/upload', array(
             'methods' => 'POST',
             'callback' => array($this, 'upload_media'),
             'permission_callback' => array($this, 'check_admin_auth')
         ));
         
-        // Update conversation status (admin)
+        // Update conversation status (admin/support agent)
         register_rest_route($namespace, '/admin/conversations/(?P<id>\d+)/status', array(
             'methods' => 'PUT',
             'callback' => array($this, 'update_conversation_status'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
-        // Get dashboard stats (admin)
+        // Get dashboard stats (admin/support agent)
         register_rest_route($namespace, '/admin/stats', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_admin_stats'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
         // Get Pusher config (for client)
@@ -412,9 +419,69 @@ class AsadMindset_Support {
             return false;
         }
         
-        // Check if user is admin
+        // Check if user is main admin
         $user = get_user_by('id', $user_id);
-        return $user && user_can($user, 'manage_options');
+        if ($user && user_can($user, 'manage_options')) {
+            return true;
+        }
+        
+        // Check if user is active sub-admin (with any permission)
+        global $wpdb;
+        $table = $wpdb->prefix . 'sub_admins';
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT is_active FROM $table WHERE user_id = %d AND is_active = 1", $user_id
+        ));
+        
+        return !empty($row);
+    }
+    
+    /**
+     * Check admin auth with specific permission
+     */
+    public function check_admin_auth_support($request) {
+        return $this->check_admin_auth_permission($request, 'support');
+    }
+    
+    public function check_admin_auth_channel($request) {
+        return $this->check_admin_auth_permission($request, 'channel');
+    }
+    
+    public function check_admin_auth_subscriptions($request) {
+        return $this->check_admin_auth_permission($request, 'subscriptions');
+    }
+    
+    public function check_admin_auth_discounts($request) {
+        return $this->check_admin_auth_permission($request, 'discounts');
+    }
+    
+    public function check_admin_auth_manual_order($request) {
+        return $this->check_admin_auth_permission($request, 'manual_order');
+    }
+    
+    private function check_admin_auth_permission($request, $permission) {
+        $token = $this->get_bearer_token($request);
+        if (!$token) return false;
+        
+        $user_id = $this->validate_jwt_token($token);
+        if (!$user_id) return false;
+        
+        // Main admin always has all permissions
+        $user = get_user_by('id', $user_id);
+        if ($user && user_can($user, 'manage_options')) return true;
+        
+        // Check sub-admin permission
+        global $wpdb;
+        $table = $wpdb->prefix . 'sub_admins';
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT permissions FROM $table WHERE user_id = %d AND is_active = 1", $user_id
+        ));
+        
+        if (!$row) return false;
+        
+        $perms = json_decode($row->permissions, true);
+        if (!is_array($perms)) return false;
+        
+        return in_array($permission, $perms);
     }
     
     /**
@@ -1080,6 +1147,8 @@ class AsadMindset_Support {
                 'mediaUrl' => $msg->media_url,
                 'duration' => (int) $msg->duration,
                 'sender' => $msg->sender_type,
+                'senderId' => (int) $msg->sender_id,
+                'senderName' => null,
                 'isEdited' => (bool) $msg->is_edited,
                 'isRead' => (bool) $msg->is_read,
                 'status' => $msg->status ?: 'sent',
@@ -1087,7 +1156,13 @@ class AsadMindset_Support {
                 'replyTo' => null
             );
             
-            // Get replyTo data if exists
+            // گرفتن نام فرستنده برای پیام‌های ادمین
+            if ($msg->sender_type === 'admin' && $msg->sender_id > 0) {
+                $sender = get_userdata($msg->sender_id);
+                if ($sender) {
+                    $result['senderName'] = $sender->display_name;
+                }
+            }
             if (!empty($msg->reply_to_id)) {
                 $reply_msg = $wpdb->get_row($wpdb->prepare(
                     "SELECT id, message_type, content, sender_type FROM $table_messages WHERE id = %d",
@@ -1172,6 +1247,8 @@ class AsadMindset_Support {
         }
         
         // Prepare message for Pusher
+        $admin_user = get_userdata($admin_id);
+        $admin_display_name = $admin_user ? $admin_user->display_name : 'پشتیبانی';
         $pusher_message = array(
             'id' => $message_id,
             'type' => $message_data['message_type'],
@@ -1179,7 +1256,8 @@ class AsadMindset_Support {
             'mediaUrl' => $message_data['media_url'],
             'duration' => $message_data['duration'],
             'sender' => 'admin',
-            'senderName' => 'پشتیبانی',
+            'senderId' => $admin_id,
+            'senderName' => $admin_display_name,
             'isEdited' => false,
             'status' => 'sent',
             'createdAt' => current_time('mysql'),
@@ -1436,7 +1514,45 @@ class AsadMindset_Support {
                 'messageIds' => array_map('intval', $unread_ids),
                 'readBy' => 'admin'
             ));
+            
+            // اطلاع به بقیه تیم که پیام‌ها خوانده شد
+            $this->trigger_pusher_event('admin-support', 'messages-read', array(
+                'conversationId' => $conversation_id,
+                'messageIds' => array_map('intval', $unread_ids),
+                'readBy' => 'admin'
+            ));
         }
+        
+        return rest_ensure_response(array('success' => true));
+    }
+    
+    /**
+     * Mark conversation as unread - sets last user messages back to unread
+     */
+    public function mark_conversation_unread($request) {
+        global $wpdb;
+        
+        $conversation_id = (int) $request->get_param('id');
+        $table_messages = $wpdb->prefix . 'support_messages';
+        
+        // آخرین پیام کاربر رو پیدا کن
+        $last_user_msg_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table_messages WHERE conversation_id = %d AND sender_type = 'user' ORDER BY id DESC LIMIT 1",
+            $conversation_id
+        ));
+        
+        if ($last_user_msg_id) {
+            // آخرین پیام کاربر رو unread کن
+            $wpdb->update($table_messages, 
+                array('status' => 'delivered', 'is_read' => 0),
+                array('id' => $last_user_msg_id)
+            );
+        }
+        
+        // اطلاع به بقیه تیم
+        $this->trigger_pusher_event('admin-support', 'conversation-unread', array(
+            'conversationId' => $conversation_id
+        ));
         
         return rest_ensure_response(array('success' => true));
     }
@@ -1498,6 +1614,9 @@ class AsadMindset_Support {
 
 // Initialize plugin
 AsadMindset_Support::get_instance();
+
+// Include Sub-Admin module (باید قبل از بقیه لود بشه)
+require_once plugin_dir_path(__FILE__) . 'sub-admin.php';
 
 // Include Alpha Channel module
 require_once plugin_dir_path(__FILE__) . 'alpha-channel.php';

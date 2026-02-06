@@ -154,46 +154,46 @@ class Alpha_Channel {
         
         // === Admin Routes ===
         
-        // Get all posts (admin)
+        // Get all posts (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/posts', array(
             'methods' => 'GET',
             'callback' => array($this, 'admin_get_posts'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
         
-        // Create post (admin)
+        // Create post (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/posts', array(
             'methods' => 'POST',
             'callback' => array($this, 'create_post'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
         
-        // Update post (admin)
+        // Update post (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/posts/(?P<id>\d+)', array(
             'methods' => 'PUT',
             'callback' => array($this, 'update_post'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
         
-        // Delete post (admin)
+        // Delete post (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/posts/(?P<id>\d+)', array(
             'methods' => 'DELETE',
             'callback' => array($this, 'delete_post'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
         
-        // Pin/Unpin post (admin)
+        // Pin/Unpin post (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/posts/(?P<id>\d+)/pin', array(
             'methods' => 'POST',
             'callback' => array($this, 'toggle_pin'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
         
-        // Get channel stats (admin)
+        // Get channel stats (admin/channel agent)
         register_rest_route($namespace, '/admin/channel/stats', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_channel_stats'),
-            'permission_callback' => array($this, 'check_admin_auth')
+            'permission_callback' => array($this, 'check_admin_auth_channel')
         ));
     }
     
@@ -211,6 +211,14 @@ class Alpha_Channel {
     public function check_admin_auth($request) {
         $support = AsadMindset_Support::get_instance();
         return $support->check_admin_auth($request);
+    }
+    
+    /**
+     * Check admin auth with channel permission
+     */
+    public function check_admin_auth_channel($request) {
+        $support = AsadMindset_Support::get_instance();
+        return $support->check_admin_auth_channel($request);
     }
     
     /**
