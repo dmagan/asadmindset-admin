@@ -38,6 +38,9 @@ class AsadMindset_Support {
         // CORS headers
         add_action('rest_api_init', array($this, 'add_cors_headers'), 15);
         
+        // Extend JWT token expiration to 30 days
+        add_filter('jwt_auth_expire', array($this, 'extend_jwt_expire'), 10, 1);
+        
         // Allow audio file uploads
         add_filter('upload_mimes', array($this, 'allow_audio_uploads'), 99);
         add_filter('wp_check_filetype_and_ext', array($this, 'fix_audio_mime_types'), 99, 5);
@@ -500,6 +503,14 @@ class AsadMindset_Support {
             return $matches[1];
         }
         return null;
+    }
+    
+    /**
+     * Extend JWT token expiration to 30 days
+     */
+    public function extend_jwt_expire($expire) {
+        // 30 days in seconds
+        return time() + (DAY_IN_SECONDS * 30);
     }
     
     /**

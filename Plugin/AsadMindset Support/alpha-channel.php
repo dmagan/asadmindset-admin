@@ -82,10 +82,20 @@ class Alpha_Channel {
             KEY created_at (created_at)
         ) $charset_collate;";
         
+        // User read status table (for badge on home page)
+        $table_read_status = $wpdb->prefix . 'alpha_channel_read_status';
+        $sql_read_status = "CREATE TABLE $table_read_status (
+            user_id bigint(20) NOT NULL,
+            last_read_post_id bigint(20) NOT NULL DEFAULT 0,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id)
+        ) $charset_collate;";
+        
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql_posts);
         dbDelta($sql_reactions);
         dbDelta($sql_notifications);
+        dbDelta($sql_read_status);
     }
     
     /**
@@ -149,6 +159,20 @@ class Alpha_Channel {
         register_rest_route($namespace, '/notifications/unread-count', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_unread_count'),
+            'permission_callback' => array($this, 'check_user_auth')
+        ));
+        
+        // Alpha channel posts unread count (for home page badge)
+        register_rest_route($namespace, '/channel/unread-count', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_channel_unread_count'),
+            'permission_callback' => array($this, 'check_user_auth')
+        ));
+        
+        // Mark alpha channel posts as read
+        register_rest_route($namespace, '/channel/mark-read', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'mark_channel_read'),
             'permission_callback' => array($this, 'check_user_auth')
         ));
         
@@ -850,6 +874,87 @@ class Alpha_Channel {
                 'pinnedPosts' => (int) $pinned_posts,
                 'todayPosts' => (int) $today_posts
             )
+        ));
+    }
+    
+    /**
+     * Get alpha channel unread posts count (for home page badge)
+     */
+    public function get_channel_unread_count($request) {
+        global $wpdb;
+        
+        $user_id = $this->get_user_id_from_request($request);
+        
+        $table_posts = $wpdb->prefix . 'alpha_channel_posts';
+        $table_read_status = $wpdb->prefix . 'alpha_channel_read_status';
+        
+        // Get user's last read post id
+        $last_read_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT last_read_post_id FROM $table_read_status WHERE user_id = %d",
+            $user_id
+        ));
+        
+        if ($last_read_id === null) {
+            $last_read_id = 0;
+        }
+        
+        // Count posts after last read
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table_posts WHERE id > %d",
+            (int) $last_read_id
+        ));
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'count' => (int) $count
+        ));
+    }
+    
+    /**
+     * Mark alpha channel as read (save latest post id)
+     */
+    public function mark_channel_read($request) {
+        global $wpdb;
+        
+        $user_id = $this->get_user_id_from_request($request);
+        
+        $table_posts = $wpdb->prefix . 'alpha_channel_posts';
+        $table_read_status = $wpdb->prefix . 'alpha_channel_read_status';
+        
+        // Get the latest post id
+        $latest_post_id = $wpdb->get_var(
+            "SELECT MAX(id) FROM $table_posts"
+        );
+        
+        if (!$latest_post_id) {
+            $latest_post_id = 0;
+        }
+        
+        // Upsert: insert or update
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table_read_status WHERE user_id = %d",
+            $user_id
+        ));
+        
+        if ($exists) {
+            $wpdb->update(
+                $table_read_status,
+                array('last_read_post_id' => $latest_post_id),
+                array('user_id' => $user_id)
+            );
+        } else {
+            $wpdb->insert(
+                $table_read_status,
+                array(
+                    'user_id' => $user_id,
+                    'last_read_post_id' => $latest_post_id
+                )
+            );
+        }
+        
+        return rest_ensure_response(array(
+            'success' => true,
+            'lastReadPostId' => (int) $latest_post_id
         ));
     }
     
