@@ -340,6 +340,13 @@ class AsadMindset_Support {
             'permission_callback' => '__return_true'
         ));
         
+        // Token validate endpoint
+        register_rest_route($namespace, '/token/validate', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'validate_token_endpoint'),
+            'permission_callback' => '__return_true'
+        ));
+        
         // Test endpoint (temporary)
         register_rest_route($namespace, '/test-upload', array(
             'methods' => 'GET',
@@ -538,6 +545,34 @@ class AsadMindset_Support {
     /**
      * Get Pusher configuration
      */
+    /**
+     * Validate token endpoint
+     */
+    public function validate_token_endpoint($request) {
+        $token = $this->get_bearer_token($request);
+        if (!$token) {
+            return new WP_REST_Response(array(
+                'code' => 'jwt_auth_no_token',
+                'message' => 'No token provided',
+                'data' => array('status' => 401)
+            ), 401);
+        }
+        
+        $user_id = $this->validate_jwt_token($token);
+        if (!$user_id) {
+            return new WP_REST_Response(array(
+                'code' => 'jwt_auth_invalid_token',
+                'message' => 'Token is invalid or expired',
+                'data' => array('status' => 401)
+            ), 401);
+        }
+        
+        return new WP_REST_Response(array(
+            'code' => 'jwt_auth_valid_token',
+            'data' => array('status' => 200)
+        ), 200);
+    }
+    
     public function get_pusher_config($request) {
         return rest_ensure_response(array(
             'key' => PUSHER_KEY,
