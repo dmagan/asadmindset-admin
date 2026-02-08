@@ -336,6 +336,13 @@ class AsadMindset_Support {
             'permission_callback' => array($this, 'check_admin_auth_support')
         ));
         
+        // Get all registered users (admin only)
+        register_rest_route($namespace, '/admin/users', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_all_users'),
+            'permission_callback' => array($this, 'check_admin_auth')
+        ));
+        
         // Get Pusher config (for client)
         register_rest_route($namespace, '/pusher-config', array(
             'methods' => 'GET',
@@ -1620,6 +1627,86 @@ class AsadMindset_Support {
         );
         
         return rest_ensure_response(array('success' => true));
+    }
+    
+    /**
+     * Get all registered users (admin only)
+     */
+    public function get_all_users($request) {
+        global $wpdb;
+        
+        $page = (int) $request->get_param('page') ?: 1;
+        $per_page = (int) $request->get_param('per_page') ?: 50;
+        $search = $request->get_param('search');
+        $offset = ($page - 1) * $per_page;
+        
+        $where = "WHERE 1=1";
+        $where_args = array();
+        
+        if (!empty($search)) {
+            $where .= " AND (u.user_login LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s)";
+            $search_like = '%' . $wpdb->esc_like($search) . '%';
+            $where_args[] = $search_like;
+            $where_args[] = $search_like;
+            $where_args[] = $search_like;
+        }
+        
+        // Get total count
+        $count_query = "SELECT COUNT(*) FROM {$wpdb->users} u $where";
+        if (!empty($where_args)) {
+            $total = $wpdb->get_var($wpdb->prepare($count_query, $where_args));
+        } else {
+            $total = $wpdb->get_var($count_query);
+        }
+        
+        // Get users
+        $query = "SELECT u.ID, u.user_login, u.user_email, u.display_name, u.user_registered 
+                  FROM {$wpdb->users} u 
+                  $where 
+                  ORDER BY u.user_registered DESC 
+                  LIMIT %d OFFSET %d";
+        
+        $query_args = array_merge($where_args, array($per_page, $offset));
+        $users = $wpdb->get_results($wpdb->prepare($query, $query_args));
+        
+        // Get subscription info for each user
+        $table_subs = $wpdb->prefix . 'subscriptions';
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_subs'") === $table_subs;
+        
+        $formatted = array_map(function($u) use ($wpdb, $table_subs, $table_exists) {
+            $result = array(
+                'id' => (int) $u->ID,
+                'username' => $u->user_login,
+                'email' => $u->user_email,
+                'displayName' => $u->display_name,
+                'registeredAt' => $u->user_registered,
+                'subscription' => null
+            );
+            
+            if ($table_exists) {
+                $sub = $wpdb->get_row($wpdb->prepare(
+                    "SELECT plan_type, status, expires_at FROM $table_subs WHERE user_id = %d ORDER BY id DESC LIMIT 1",
+                    $u->ID
+                ));
+                if ($sub) {
+                    $result['subscription'] = array(
+                        'plan' => $sub->plan_type,
+                        'status' => $sub->status,
+                        'expiresAt' => $sub->expires_at
+                    );
+                }
+            }
+            
+            return $result;
+        }, $users);
+        
+        return rest_ensure_response(array(
+            'users' => $formatted,
+            'total' => (int) $total,
+            'page' => $page,
+            'perPage' => $per_page,
+            'totalPages' => ceil($total / $per_page)
+        ));
     }
     
     /**
