@@ -1684,10 +1684,18 @@ class AsadMindset_Support {
             );
             
             if ($table_exists) {
+                // First try to find active/approved subscription
                 $sub = $wpdb->get_row($wpdb->prepare(
-                    "SELECT plan_type, status, expires_at FROM $table_subs WHERE user_id = %d ORDER BY id DESC LIMIT 1",
+                    "SELECT plan_type, status, expires_at FROM $table_subs WHERE user_id = %d AND status = 'approved' AND expires_at > NOW() ORDER BY expires_at DESC LIMIT 1",
                     $u->ID
                 ));
+                // If no active, get the latest one
+                if (!$sub) {
+                    $sub = $wpdb->get_row($wpdb->prepare(
+                        "SELECT plan_type, status, expires_at FROM $table_subs WHERE user_id = %d ORDER BY id DESC LIMIT 1",
+                        $u->ID
+                    ));
+                }
                 if ($sub) {
                     $result['subscription'] = array(
                         'plan' => $sub->plan_type,
