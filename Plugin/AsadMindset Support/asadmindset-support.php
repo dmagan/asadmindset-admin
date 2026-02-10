@@ -631,6 +631,38 @@ class AsadMindset_Support {
     }
     
     /**
+     * Send push notification to all admins/sub-admins with support permission
+     */
+    private function send_push_to_support_team($title, $body, $data = []) {
+        global $wpdb;
+        $push = new AsadMindset_Push_Notifications();
+        
+        // Main admins
+        $admins = get_users(['role' => 'administrator']);
+        foreach ($admins as $admin) {
+            if (user_can($admin, 'manage_options')) {
+                $push->send_to_user($admin->ID, $title, $body, $data);
+            }
+        }
+        
+        // Sub-admins with support permission
+        $table_sa = $wpdb->prefix . 'sub_admins';
+        $sub_admins = $wpdb->get_results(
+            "SELECT user_id, permissions FROM $table_sa WHERE is_active = 1"
+        );
+        $sent_ids = array_map(function($a) { return $a->ID; }, $admins);
+        
+        foreach ($sub_admins as $sa) {
+            if (in_array((int) $sa->user_id, $sent_ids)) continue;
+            $perms = json_decode($sa->permissions, true);
+            if (is_array($perms) && in_array('support', $perms)) {
+                $push->send_to_user((int) $sa->user_id, $title, $body, $data);
+                $sent_ids[] = (int) $sa->user_id;
+            }
+        }
+    }
+    
+    /**
      * Generate Pusher auth signature
      */
     private function generate_pusher_signature($method, $path, $body, $timestamp) {
@@ -825,6 +857,15 @@ class AsadMindset_Support {
         
         // Trigger Pusher event - to admin channel (marks as delivered when admin receives)
         $this->trigger_pusher_event('admin-support', 'new-message', $pusher_message);
+        
+        // Push notification to all admins/sub-admins with support permission
+        $this->send_push_to_support_team(
+            $user ? $user->display_name : 'کاربر',
+            $message_data['message_type'] === 'text' 
+                ? mb_substr($message_data['content'], 0, 100) 
+                : ($message_data['message_type'] === 'image' ? '📷 تصویر' : ($message_data['message_type'] === 'video' ? '🎬 ویدیو' : '🎤 صوتی')),
+            ['type' => 'support', 'conversationId' => (string) $conversation->id, 'url' => '/?open=support&chatId=' . $conversation->id]
+        );
         
         return rest_ensure_response(array(
             'success' => true,
@@ -1321,6 +1362,22 @@ class AsadMindset_Support {
         // Trigger Pusher event
         $this->trigger_pusher_event('conversation-' . $conversation_id, 'new-message', $pusher_message);
         
+        // Push notification to the user
+        $conversation = $wpdb->get_row($wpdb->prepare(
+            "SELECT user_id FROM $table_conversations WHERE id = %d", $conversation_id
+        ));
+        if ($conversation) {
+            $push = new AsadMindset_Push_Notifications();
+            $push->send_to_user(
+                (int) $conversation->user_id,
+                $admin_display_name,
+                $message_data['message_type'] === 'text'
+                    ? mb_substr($message_data['content'], 0, 100)
+                    : ($message_data['message_type'] === 'image' ? '📷 تصویر' : ($message_data['message_type'] === 'video' ? '🎬 ویدیو' : '🎤 صوتی')),
+                ['type' => 'support', 'conversationId' => (string) $conversation_id, 'url' => '/?open=support']
+            );
+        }
+        
         return rest_ensure_response(array(
             'success' => true,
             'message' => $pusher_message
@@ -1762,3 +1819,7 @@ require_once plugin_dir_path(__FILE__) . 'sub-admin.php';
 // Include Alpha Channel module
 require_once plugin_dir_path(__FILE__) . 'alpha-channel.php';
 require_once plugin_dir_path(__FILE__) . 'subscription.php';
+
+// Include Team Chat module
+require_once plugin_dir_path(__FILE__) . 'team-chat.php';
+require_once plugin_dir_path(__FILE__) . 'push-notifications.php';
